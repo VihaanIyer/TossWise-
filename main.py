@@ -219,6 +219,9 @@ class SmartTrashBin:
         Initialize the smart trash bin system
         """
         Logger.log_system_event("Initializing Smart Trash Bin System...")
+
+        # Toggle this if you want deep LLM debug logs (request/response/summary)
+        self.llm_debug_logs = False
         
         # Initialize components
         try:
@@ -251,7 +254,6 @@ class SmartTrashBin:
             if os.path.exists(location_file):
                 try:
                     with open(location_file, 'r') as f:
-                        import json
                         self.bin_layout_metadata = json.load(f)
                         self.classifier.update_bin_context(self.bin_layout_metadata)
                         identified_bins = len(self.bin_layout_metadata.get("bins", [])) if isinstance(self.bin_layout_metadata, dict) else len(self.bin_layout_metadata or [])
@@ -332,6 +334,9 @@ class SmartTrashBin:
         self.processing_detection = False  # Track if we're currently processing a detection
         self.detected_bags = []  # Store detected bags
         self.current_bag_index = 0  # Track which bag we're asking about
+
+        # Proper classification cooldown tracking (shared with run loop)
+        self.last_classification_time = 0.0
         
         # File watcher for bin layout reload
         self.last_reload_time = 0
@@ -662,6 +667,9 @@ class SmartTrashBin:
         if frame is None:
             Logger.log_error("No frame provided for analysis", "process_detection")
             return
+
+        # Set cooldown timestamp so main loop doesn't immediately re-trigger detection
+        self.last_classification_time = time.time()
         
         # First, check for trash bags
         Logger.log_system_event("Checking for trash bags in image...")
@@ -682,13 +690,15 @@ class SmartTrashBin:
         
         # No bags found, proceed with individual item detection
         Logger.log_system_event("No bags detected. Analyzing image for individual trash items...")
-        Logger.log_llm_request("Analyzing image for all visible trash/waste items", image_sent=True)
+        if self.llm_debug_logs:
+            Logger.log_llm_request("Analyzing image for all visible trash/waste items", image_sent=True)
         
         # Use Gemini Vision to identify trash in the image
         try:
             classifications = self.classifier.classify_item_from_image(frame, detected_items=None)
             raw_response = getattr(self.classifier, 'last_raw_response', 'Response received')
-            Logger.log_llm_response(raw_response, classifications)
+            if self.llm_debug_logs:
+                Logger.log_llm_response(raw_response, classifications)
         except Exception as e:
             Logger.log_error(str(e), "Gemini Vision API call")
             classifications = []
@@ -702,8 +712,9 @@ class SmartTrashBin:
         self.current_item = classifications[0]
         self.current_classifications = classifications
         
-        # Log classification summary
-        Logger.log_classification_summary(classifications)
+        # Log classification summary (optional, can be noisy)
+        if self.llm_debug_logs:
+            Logger.log_classification_summary(classifications)
         
         # Only speak if trash items were found
         # Helper function to get bin color
@@ -808,7 +819,6 @@ class SmartTrashBin:
         print("  'q' - Quit")
         
         frame_count = 0
-        last_classification_time = 0
         # No longer tracking person detection - using trash detection instead
         
         Logger.log_system_event("Camera started. Using Roboflow YOLOv8 for trash detection!")
@@ -840,7 +850,7 @@ class SmartTrashBin:
                 # Run Roboflow YOLOv8 trash detection with throttling to reduce lag
                 frame_count += 1
                 current_time = time.time()
-                time_elapsed = current_time - last_classification_time > self.detection_cooldown
+                time_elapsed = current_time - self.last_classification_time > self.detection_cooldown
                 trash_check_elapsed = current_time - self.last_trash_check_time > self.trash_check_interval
                 
                 # Only check for trash if:
@@ -874,12 +884,6 @@ class SmartTrashBin:
                     cv2.putText(frame, status_text, 
                               (10, 30), 
                               cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-                
-                # Check for quit key (non-blocking)
-                key = cv2.waitKey(1) & 0xFF
-                if key == ord('q'):
-                    Logger.log_system_event("Quit key pressed. Shutting down...")
-                    break
                 
                 # Show current classification results if available
                 if self.current_classifications:
@@ -915,9 +919,10 @@ class SmartTrashBin:
                 # Display the frame
                 cv2.imshow('Smart Trash Bin - Detection Running', frame)
                 
-                # Handle keyboard input
+                # Handle keyboard input ONCE per frame (fix double waitKey)
                 key = cv2.waitKey(1) & 0xFF
                 if key == ord('q'):
+                    Logger.log_system_event("Quit key pressed. Shutting down...")
                     break
         
         except KeyboardInterrupt:

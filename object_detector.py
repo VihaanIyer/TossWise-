@@ -14,6 +14,9 @@ except ImportError:
     ROBOFLOW_AVAILABLE = False
     print("Warning: roboflow package not available, trash detection will be disabled")
 
+# Toggle this to instantly disable Roboflow network calls if you want max speed
+USE_ROBOFLOW_TRASH = True
+
 
 class ObjectDetector:
     def __init__(self, model_path='yolov8n.pt'):
@@ -31,30 +34,41 @@ class ObjectDetector:
         print("Initializing Roboflow client...")
         self.roboflow_api_key = "i34YBNJrrsWv3HEBIeNs"
         self.roboflow_model_id = "yolov8-trash-detections/6"
+
         self.roboflow_client = None
-        
-        if ROBOFLOW_AVAILABLE:
+        self.roboflow_model = None
+        self.roboflow_project_name = None
+        self.roboflow_version_num = None
+
+        if ROBOFLOW_AVAILABLE and USE_ROBOFLOW_TRASH:
             try:
-                # Initialize Roboflow client
                 rf = Roboflow(api_key=self.roboflow_api_key)
-                # Parse model_id: "yolov8-trash-detections/6" -> workspace/project/version
-                # We need to get the workspace - try to infer from model
-                # For now, we'll use the model directly via the roboflow package
-                # The model_id format suggests: project/version
-                # We'll need to know the workspace, but let's try a different approach
+                # "yolov8-trash-detections/6" -> project / version
+                parts = self.roboflow_model_id.split('/')
+                if len(parts) != 2:
+                    raise ValueError(f"Invalid roboflow_model_id format: {self.roboflow_model_id}")
+                self.roboflow_project_name = parts[0]
+                self.roboflow_version_num = int(parts[1])
+
+                # Resolve project & model ONCE instead of every frame
+                project = rf.project(self.roboflow_project_name)
+                self.roboflow_model = project.version(self.roboflow_version_num).model
                 self.roboflow_client = rf
-                self.roboflow_workspace = None  # Will be determined from API
-                print("Roboflow client initialized successfully!")
+                print(f"Roboflow model initialized: {self.roboflow_project_name}/{self.roboflow_version_num}")
             except Exception as e:
-                print(f"Warning: Could not initialize Roboflow client: {e}")
+                print(f"Warning: Could not initialize Roboflow client/model: {e}")
                 self.roboflow_client = None
+                self.roboflow_model = None
         else:
-            print("Roboflow package not available")
+            if not ROBOFLOW_AVAILABLE:
+                print("Roboflow package not available")
+            if not USE_ROBOFLOW_TRASH:
+                print("Roboflow trash detection disabled by configuration")
         
         # Common food-related classes in COCO dataset
         self.food_classes = [
             'apple', 'banana', 'orange', 'broccoli', 'carrot', 'hot dog',
-            'pizza', 'donut', 'cake', 'bottle', 'cup', 'bowl', 'sandwich',
+            'pizza,', 'donut', 'cake', 'bottle', 'cup', 'bowl', 'sandwich',
             'orange', 'pizza', 'donut', 'cake'
         ]
         
@@ -82,9 +96,6 @@ class ObjectDetector:
             'mouse', 'laptop', 'book', 'scissors', 'teddy bear',
             'hair drier', 'toothbrush', 'tv', 'monitor', 'keyboard'
         ]
-        
-        # Also detect common objects that could be trash
-        # Lower the threshold for detection
     
     def detect_person(self, frame):
         """
@@ -117,7 +128,8 @@ class ObjectDetector:
         Returns:
             List of detected trash objects with their classes and confidence scores
         """
-        if self.roboflow_client is None:
+        # Fast exit if Roboflow not usable
+        if not USE_ROBOFLOW_TRASH or not ROBOFLOW_AVAILABLE or self.roboflow_model is None:
             return []
         
         try:
@@ -126,52 +138,30 @@ class ObjectDetector:
             pil_image = Image.fromarray(frame_rgb)
             
             # Resize image if too large (Roboflow API has size limits)
-            # Use smaller size for faster API calls and less lag
-            max_size = 1280  # Reduced from 1920 for faster processing
+            # Slightly smaller for speed – you're not doing fine-grained medical imaging here
+            max_size = 1024
             if pil_image.width > max_size or pil_image.height > max_size:
                 pil_image.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
             
-            # Parse model_id: "yolov8-trash-detections/6" = project/version
-            project_name = self.roboflow_model_id.split('/')[0]
-            version_num = int(self.roboflow_model_id.split('/')[1])
+            # Roboflow's SDK usually accepts file paths, PIL images, or numpy arrays.
+            # To stay safe across versions, we keep the temp-file approach,
+            # but we DO NOT re-create the project/model each time anymore.
+            import tempfile
+            import os
+            with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as tmp_file:
+                pil_image.save(tmp_file.name, format='JPEG')
+                temp_path = tmp_file.name
             
-            # Try to access the project directly
-            # The roboflow package requires workspace/project/version format
-            # Since we only have project/version, we need to try accessing it directly
-            # or the user needs to provide the workspace name
             try:
-                # Try accessing project directly (works if it's in your default workspace)
-                # The roboflow package may auto-detect workspace for your projects
-                project = self.roboflow_client.project(project_name)
-                model = project.version(version_num).model
-                
-                # Save PIL image to temporary file for Roboflow (it expects file path)
-                import tempfile
-                import os
-                with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as tmp_file:
-                    pil_image.save(tmp_file.name, format='JPEG')
-                    temp_path = tmp_file.name
-                
+                # Lower confidence threshold for sensitivity; overlap relatively low for speed
+                prediction = self.roboflow_model.predict(temp_path, confidence=30, overlap=30)
+                result = prediction.json()
+            finally:
+                # Clean up temporary file immediately
                 try:
-                    # Run prediction with file path
-                    # Use lower confidence threshold for faster detection, higher overlap for better accuracy
-                    prediction = model.predict(temp_path, confidence=30, overlap=30)
-                    result = prediction.json()
-                finally:
-                    # Clean up temporary file immediately
-                    try:
-                        os.unlink(temp_path)
-                    except:
-                        pass
-                    
-            except Exception as e1:
-                # If direct access fails, the project might be in a specific workspace
-                # Try to get workspace from the model_id or use a default
-                print(f"Direct project access failed: {e1}")
-                print(f"Note: Roboflow requires workspace name. Model ID format should be: workspace/project/version")
-                print(f"      Current model_id: {self.roboflow_model_id}")
-                print(f"      If you know the workspace, update model_id to: workspace/{project_name}/{version_num}")
-                return []
+                    os.unlink(temp_path)
+                except:
+                    pass
             
             # Parse results
             detections = []
@@ -214,7 +204,7 @@ class ObjectDetector:
                         
                         detections.append({
                             'class': class_name,
-                            'confidence': confidence,
+                            'confidence': float(confidence),
                             'bbox': [x1, y1, x2, y2]
                         })
             
@@ -222,8 +212,7 @@ class ObjectDetector:
             
         except Exception as e:
             print(f"Error in Roboflow trash detection: {e}")
-            import traceback
-            traceback.print_exc()
+            # No full traceback spam in the hot path – it's running every few seconds
             return []
     
     def detect_objects(self, frame, filter_trash_only=True):
@@ -260,14 +249,11 @@ class ObjectDetector:
                 # SMART GLOVE FILTER
                 # -------------------------------
                 if class_name.lower() == "glove":
-                    # Tune these as needed
                     MIN_CONF_GLOVE = 0.80     # require high confidence
                     MAX_REL_AREA_GLOVE = 0.30 # gloves shouldn't cover 30%+ of frame
                     is_low_conf = confidence < MIN_CONF_GLOVE
                     is_too_big = box_area > MAX_REL_AREA_GLOVE * frame_area
-                    # If it's low confidence OR absurdly large, assume it's a hand
                     if is_low_conf or is_too_big:
-                        # Skip this detection entirely
                         continue
                 # -------------------------------
                 # END GLOVE FILTER
@@ -280,14 +266,11 @@ class ObjectDetector:
                     if any(excluded in class_name_lower for excluded in self.excluded_classes):
                         continue
                     # Include trash/food related items OR any object with decent confidence
-                    # (more permissive to catch items in hand)
                     is_trash_item = any(trash in class_name_lower for trash in self.trash_classes)
-                    # If it's not a trash item but has high confidence (>60%), include it anyway
-                    # (might be something we should classify)
                     if not is_trash_item:
                         if confidence < 0.6:
                             continue
-                        # High confidence non-trash item - might be trash, include it
+                        # High-confidence non-trash item – might still matter, include it
                 
                 detections.append({
                     'class': class_name,
@@ -364,4 +347,3 @@ class ObjectDetector:
                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 2)
         
         return annotated_frame
-

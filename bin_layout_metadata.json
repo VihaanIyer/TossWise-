@@ -2,34 +2,25 @@
   "bins": [
     {
       "id": 0,
-      "label": "white_bin",
-      "type": "landfill",
-      "color": "white",
-      "sign": "trash",
-      "pos": "leftmost",
+      "label": "blue_bin",
+      "type": "recycling",
+      "color": "blue",
+      "sign": "Recycle",
+      "pos": "second_from_left",
       "conf": 1
     },
     {
       "id": 1,
-      "label": "blue_bin",
-      "type": "recycling",
-      "color": "blue",
-      "sign": "recycling",
-      "pos": "center",
-      "conf": 1
-    },
-    {
-      "id": 2,
       "label": "green_bin",
       "type": "compost",
       "color": "green",
-      "sign": "compost",
+      "sign": "Compost",
       "pos": "rightmost",
       "conf": 1
     }
   ],
   "location": "atlanta_ga_usa",
   "location_name": "Atlanta, GA, USA",
-  "scene": "three bins in a row: landfill, recycling, and compost",
-  "raw_response": "{\n  \"bins\": [\n    {\n      \"id\": 0,\n      \"label\": \"white_bin\",\n      \"type\": \"landfill\",\n      \"pos\": \"leftmost\",\n      \"color\": \"white\",\n      \"sign\": \"trash\",\n      \"conf\": 0.8\n    },\n    {\n      \"id\": 1,\n      \"label\": \"blue_bin\",\n      \"type\": \"recycling\",\n      \"pos\": \"center\",\n      \"color\": \"blue\",\n      \"sign\": \"recycling\",\n      \"conf\": 0.9\n    },\n    {\n      \"id\": 2,\n      \"label\": \"green_bin\",\n      \"type\": \"compost\",\n      \"pos\": \"rightmost\",\n      \"color\": \"green\",\n      \"sign\": \"compost\",\n      \"conf\": 0.9\n    }\n  ],\n  \"scene\": \"three bins in a row: landfill, recycling, and compost\"\n}"
+  "scene": "Two bins, blue recycling and green compost, in a lounge area.",
+  "raw_response": "{\n  \"bins\": [\n    {\n      \"id\": 0,\n      \"label\": \"blue_bin\",\n      \"type\": \"recycling\",\n      \"pos\": \"second_from_left\",\n      \"color\": \"blue\",\n      \"sign\": \"Recycle\",\n      \"conf\": 0.9\n    },\n    {\n      \"id\": 1,\n      \"label\": \"green_bin\",\n      \"type\": \"compost\",\n      \"pos\": \"rightmost\",\n      \"color\": \"green\",\n      \"sign\": \"Compost\",\n      \"conf\": 0.9\n    }\n  ],\n  \"scene\": \"Two bins, blue recycling and green compost, in a lounge area.\"\n}"
 }
