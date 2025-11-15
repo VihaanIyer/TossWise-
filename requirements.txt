@@ -1,0 +1,10 @@
+opencv-python>=4.8.0
+ultralytics>=8.1.0
+google-generativeai>=0.3.0
+elevenlabs>=0.2.27
+speechrecognition>=3.10.0
+pyaudio>=0.2.14
+numpy>=1.26.0
+pillow>=10.0.0
+python-dotenv>=1.0.0
+
