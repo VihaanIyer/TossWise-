@@ -6,6 +6,7 @@ Determines which bin (recycling, compost, landfill) an item should go into
 import google.generativeai as genai
 import os
 import re
+import json
 from dotenv import load_dotenv
 from PIL import Image
 import io
@@ -128,19 +129,77 @@ class TrashClassifier:
         # Initialize for logging
         self.last_raw_response = ""
         
-        # System prompt - concise and fast but emphasizes visual analysis
-        self.system_prompt = """You are a waste classification expert. Analyze the IMAGE carefully to see the ACTUAL material, condition, and contamination level of each item.
+        # Load bin layout metadata from JSON
+        self.bin_layout = self._load_bin_layout()
+        
+        # Build system prompt based on actual bin layout
+        self.system_prompt = self._build_system_prompt()
+        
+        # Initialize bin_context for backward compatibility
+        self.bin_context = ""
+        self.bin_layout_metadata = None
+    
+    def _load_bin_layout(self):
+        """
+        Load bin layout metadata from JSON file
+        """
+        try:
+            json_path = os.path.join(os.path.dirname(__file__), 'bin_layout_metadata.json')
+            if os.path.exists(json_path):
+                with open(json_path, 'r') as f:
+                    data = json.load(f)
+                    return data.get('bins', [])
+            else:
+                print(f"⚠️ bin_layout_metadata.json not found at {json_path}, using default bins")
+                return []
+        except Exception as e:
+            print(f"⚠️ Error loading bin layout: {e}, using default bins")
+            return []
+    
+    def _build_system_prompt(self):
+        """
+        Build system prompt based on actual bin layout from JSON
+        """
+        base_prompt = """You are a waste classification expert. Analyze the IMAGE carefully to see the ACTUAL material, condition, and contamination level of each item.
 
-BIN SYSTEM:
+IMPORTANT: ONLY identify items that are TRASH/WASTE meant for disposal. DO NOT classify personal items like:
+- Phones, electronics, devices
+- Hats, caps, beanies, clothing
+- Wallets, keys, personal belongings
+- Bags, backpacks, purses
+- Any item that is clearly being held/used by a person and not trash
+
+CRITICAL: Look at the IMAGE to determine if items are CLEAN or CONTAMINATED. Analyze what you actually see.
+
+"""
+        
+        if not self.bin_layout:
+            # Default bins if JSON not loaded
+            return base_prompt + """BIN SYSTEM:
 - RECYCLING (blue): Clean recyclable materials
   * Clean plastic items (forks, bottles, containers)
   * Clean paper/cardboard
   * Metal items (cans, utensils if clean)
   * Glass
 - COMPOST (green): Organic food waste (fruit peels, food scraps, coffee grounds)
-- LANDFILL (black/grey): Contaminated items, non-recyclables, greasy items
-
-CRITICAL: Look at the IMAGE to determine if items are CLEAN or CONTAMINATED. A clean plastic fork goes in recycling. A dirty plastic fork with food goes in landfill. Analyze what you actually see."""
+- LANDFILL (black/grey): Contaminated items, non-recyclables, greasy items"""
+        
+        # Build bin system from JSON
+        bin_descriptions = []
+        for bin_info in self.bin_layout:
+            bin_type = bin_info.get('type', '').upper()
+            color = bin_info.get('color', '')
+            sign = bin_info.get('sign', '')
+            label = bin_info.get('label', '')
+            
+            # Format bin description
+            bin_desc = f"- {bin_type} ({color}): {sign}"
+            if label:
+                bin_desc += f" [Label: {label}]"
+            bin_descriptions.append(bin_desc)
+        
+        bin_system = "BIN SYSTEM:\n" + "\n".join(bin_descriptions)
+        return base_prompt + bin_system
     
     def classify_item(self, item_name, context="", image=None):
         """
@@ -235,35 +294,49 @@ CRITICAL: Look at the IMAGE to determine if items are CLEAN or CONTAMINATED. A c
             items_list = [item['class'] for item in detected_items]
             items_text = f"Note: YOLOv8 object detection suggested these items might be present: {', '.join(items_list)}. However, please look at the ACTUAL IMAGE and identify what trash/waste items are REALLY visible."
         
+        # Build bin descriptions from JSON
+        bin_descriptions = []
+        if self.bin_layout:
+            for bin_info in self.bin_layout:
+                bin_type = bin_info.get('type', '').upper()
+                color = bin_info.get('color', '')
+                sign = bin_info.get('sign', '')
+                label = bin_info.get('label', '')
+                bin_desc = f"- {bin_type} ({color}): {sign}"
+                if label:
+                    bin_desc += f" [Label: {label}]"
+                bin_descriptions.append(bin_desc)
+        else:
+            # Fallback descriptions
+            bin_descriptions = [
+                "- RECYCLING (blue): Clean recyclable materials",
+                "- COMPOST (green): Organic food waste",
+                "- LANDFILL (black/grey): Contaminated or non-recyclable items"
+            ]
+        
         prompt = f"""EXAMINE THIS IMAGE CLOSELY. Look at each item's actual appearance, material, and condition. Classify based on what you SEE, not assumptions.
+
+CRITICAL: ONLY identify items that are TRASH/WASTE meant for disposal. IGNORE personal items like:
+- Phones, electronics, devices, chargers
+- Hats, caps, beanies, clothing, accessories
+- Wallets, keys, personal belongings
+- Bags, backpacks, purses
+- Glasses, watches, jewelry
+- Any item clearly being held/used by a person (not trash)
+
+ONLY classify items that are clearly waste/trash ready to be thrown away (food scraps, empty containers, used utensils, wrappers, etc.).
 
 {items_text}
 
-BIN COLORS:
-- RECYCLING (blue): Clean recyclable materials
-  * Clean plastic items (forks, bottles, containers, cups) - NO food residue visible
-  * Clean paper/cardboard (plates, boxes) - NO grease or food stains
-  * Metal items (cans, utensils) - Clean, no contamination
-  * Glass bottles/jars - Clean
-- COMPOST (green): Organic food waste
-  * Food scraps, fruit peels, vegetables
-  * Coffee grounds, tea bags
-- LANDFILL (black/grey): Contaminated or non-recyclable items
-  * Items with visible food residue, grease, or contamination
-  * Greasy paper (pizza boxes with visible grease, napkins with food)
-  * Styrofoam, plastic wrappers
-  * Dirty/contaminated plastic items
+AVAILABLE BINS (use these exact rules from the facility):
+{chr(10).join(bin_descriptions)}
 
-CRITICAL - Look at the IMAGE to determine condition:
-- Plastic fork: Look at the image - is it CLEAN (no food visible) or DIRTY (food residue visible)?
-  * CLEAN plastic fork → RECYCLING (blue)
-  * DIRTY plastic fork with food → LANDFILL (black/grey)
-- Paper plate: Is it CLEAN or GREASY/with food?
-  * CLEAN paper plate → RECYCLING (blue)
-  * GREASY paper plate → LANDFILL (black/grey)
-- Bottles/cans: Are they CLEAN or CONTAMINATED?
-  * CLEAN → RECYCLING (blue)
-  * CONTAMINATED → LANDFILL (black/grey)
+CRITICAL - Match items to bins based on the rules above:
+- Read each bin's signage/rules carefully
+- Match items to the correct bin based on what the bin accepts
+- Check if items are CLEAN or CONTAMINATED from the image
+- Use the specific bin rules (e.g., landfill: "nothing except styrofoam and PPE", compost: "all food, napkins, compostables", recycle: "all paper, metal, plastic, wrappers")
+- For paper items, distinguish between mixed paper (newspapers, magazines, folders) and white paper (printer paper, notebook paper)
 
 RESPONSE FORMAT:
 - [item name] goes into [bin type] bin usually [color]
@@ -275,7 +348,13 @@ Examples:
 - clean paper plate → "paper plate goes into recycle usually blue"
 - greasy paper plate → "greasy paper plate goes into landfill usually black"
 
-IMPORTANT: Look at the ACTUAL IMAGE. See if items are clean or dirty. Don't guess - use what you see. List all trash items:"""
+IMPORTANT: 
+- Look at the ACTUAL IMAGE. See if items are clean or dirty. Don't guess - use what you see.
+- ONLY list items that are clearly TRASH/WASTE ready for disposal.
+- DO NOT list personal items (phones, caps, beanies, wallets, keys, bags, etc.).
+- If you see a person holding something, only classify it if it's clearly trash (like a used napkin, empty bottle, food wrapper), NOT if it's a personal item.
+
+List all trash items:"""
         
         try:
             # Try vision API if model supports it
@@ -305,12 +384,27 @@ IMPORTANT: Look at the ACTUAL IMAGE. See if items are clean or dirty. Don't gues
                         print(f"⚠️ Vision API failed, using text-only: {error_str[:100]}")
                     
                     # Use text-only classification - fast and natural
+                    # Build bin descriptions from JSON
+                    bin_desc_text = ""
+                    if self.bin_layout:
+                        bin_list = []
+                        for bin_info in self.bin_layout:
+                            bin_type = bin_info.get('type', '').upper()
+                            color = bin_info.get('color', '')
+                            sign = bin_info.get('sign', '')
+                            bin_list.append(f"- {bin_type} ({color}): {sign}")
+                        bin_desc_text = "\n".join(bin_list)
+                    else:
+                        bin_desc_text = """- RECYCLING = blue bin
+- COMPOST = green bin  
+- LANDFILL = black or grey bin"""
+                    
                     text_prompt = f"""Quickly classify these items. Format: [item] goes into [bin_type] bin usually [color]
 
-BIN COLORS:
-- RECYCLING = blue bin
-- COMPOST = green bin  
-- LANDFILL = black or grey bin
+CRITICAL: ONLY classify items that are TRASH/WASTE. IGNORE personal items (phones, caps, beanies, wallets, keys, bags, etc.).
+
+AVAILABLE BINS (use these exact rules):
+{bin_desc_text}
 
 Items: {items_text}
 
@@ -333,12 +427,27 @@ Respond fast in format: [item] goes into [bin_type] bin usually [color]"""
             else:
                 # Text-only model - fast and natural
                 print("⚠️ Model doesn't support vision, using text-only classification")
+                # Build bin descriptions from JSON
+                bin_desc_text = ""
+                if self.bin_layout:
+                    bin_list = []
+                    for bin_info in self.bin_layout:
+                        bin_type = bin_info.get('type', '').upper()
+                        color = bin_info.get('color', '')
+                        sign = bin_info.get('sign', '')
+                        bin_list.append(f"- {bin_type} ({color}): {sign}")
+                    bin_desc_text = "\n".join(bin_list)
+                else:
+                    bin_desc_text = """- RECYCLING = blue bin
+- COMPOST = green bin
+- LANDFILL = black or grey bin"""
+                
                 text_prompt = f"""Quickly classify these items. Format: [item] goes into [bin_type] bin usually [color]
 
-BIN COLORS:
-- RECYCLING = blue bin
-- COMPOST = green bin
-- LANDFILL = black or grey bin
+CRITICAL: ONLY classify items that are TRASH/WASTE. IGNORE personal items (phones, caps, beanies, wallets, keys, bags, etc.).
+
+AVAILABLE BINS (use these exact rules):
+{bin_desc_text}
 
 Items: {items_text}
 
@@ -453,9 +562,13 @@ Respond fast in format: [item] goes into [bin_type] bin usually [color]"""
                 
                 # If we found an item, add it
                 if item_name:
+                    # Get bin name/label from bin_layout
+                    bin_name = self._get_bin_name_for_type(bin_type)
                     items_classifications.append({
                         'item': item_name,
                         'bin_type': bin_type,
+                        'bin_name': bin_name,
+                        'bin_color': self._get_bin_color_for_type(bin_type),
                         'explanation': explanation if explanation else f"This goes in the {bin_type} bin."
                     })
             
@@ -489,9 +602,13 @@ Respond fast in format: [item] goes into [bin_type] bin usually [color]"""
                 
                 explanation = f"This goes in the {color} {bin_type} bin." if color else f"This goes in the {bin_type} bin."
                 
+                # Get bin name/label from bin_layout
+                bin_name = self._get_bin_name_for_type(bin_type)
                 items_classifications.append({
                     'item': item_name,
                     'bin_type': bin_type,
+                    'bin_name': bin_name,
+                    'bin_color': color if color else self._get_bin_color_for_type(bin_type),
                     'explanation': explanation
                 })
             
@@ -500,11 +617,62 @@ Respond fast in format: [item] goes into [bin_type] bin usually [color]"""
             print(f"Error classifying from image: {e}")
             item_name = detected_items[0]['class'] if detected_items else "item"
             # Return as list for consistency
+            bin_name = self._get_bin_name_for_type('landfill')
             return [{
                 'bin_type': 'landfill',
+                'bin_name': bin_name,
+                'bin_color': self._get_bin_color_for_type('landfill'),
                 'explanation': f"Unable to classify from image. Please check local recycling guidelines.",
                 'item': item_name
             }]
+    
+    def _get_bin_name_for_type(self, bin_type):
+        """
+        Get the bin name/label for a given bin type from the JSON layout
+        """
+        if not self.bin_layout:
+            # Fallback to bin_type if no layout
+            return bin_type
+        
+        bin_type_lower = bin_type.lower()
+        for bin_info in self.bin_layout:
+            if bin_info.get('type', '').lower() == bin_type_lower:
+                # Return a human-readable name based on label
+                label = bin_info.get('label', '')
+                if label:
+                    # Convert "blue_recycle" to "recycle bin" or "green_compost" to "compost bin"
+                    if '_' in label:
+                        parts = label.split('_')
+                        if len(parts) > 1:
+                            return f"{parts[-1]} bin"
+                    return f"{label} bin"
+                # Fallback to type
+                return f"{bin_type} bin"
+        
+        # Default fallback
+        return f"{bin_type} bin"
+    
+    def _get_bin_color_for_type(self, bin_type):
+        """
+        Get the bin color for a given bin type from the JSON layout
+        """
+        if not self.bin_layout:
+            # Fallback colors
+            if bin_type.lower() == 'recycling':
+                return 'blue'
+            elif bin_type.lower() == 'compost':
+                return 'green'
+            elif bin_type.lower() == 'landfill':
+                return 'black or grey'
+            return bin_type
+        
+        bin_type_lower = bin_type.lower()
+        for bin_info in self.bin_layout:
+            if bin_info.get('type', '').lower() == bin_type_lower:
+                return bin_info.get('color', 'blue')
+        
+        # Default fallback
+        return 'blue'
     
     def _rule_based_classification(self, detected_items):
         """

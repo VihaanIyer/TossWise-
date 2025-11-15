@@ -292,22 +292,34 @@ class SmartTrashBin:
             Logger.log_system_event(f"⏱️  RESPONSE TIME: {response_time:.2f} seconds (person detected → speaking)")
             self.person_detected_time = None  # Reset after logging
         
+        # Helper function to get bin name and color
+        def get_bin_info(item):
+            bin_name = item.get('bin_name', item.get('bin_type', 'bin'))
+            bin_color = item.get('bin_color', get_bin_color(item['bin_type']))
+            return bin_name, bin_color
+        
         if len(classifications) == 1:
             # Single item - natural, fast response
             item = classifications[0]
-            bin_color = get_bin_color(item['bin_type'])
-            # Use natural format: "item goes into bin_type bin usually color"
-            response = f"{item['item']} goes into {item['bin_type'].lower()} bin usually {bin_color}"
+            bin_name, bin_color = get_bin_info(item)
+            # Use format: "item goes into bin_name usually color"
+            response = f"{item['item']} goes into {bin_name} usually {bin_color}"
             Logger.log_tts_output(response)
             self.tts.speak(response)
+            # Add closing message
+            Logger.log_tts_output("Have a great day!")
+            self.tts.speak("Have a great day!")
         elif len(classifications) > 1:
             # Multiple items - speak each one naturally
             for i, item in enumerate(classifications, 1):
-                bin_color = get_bin_color(item['bin_type'])
-                response = f"{item['item']} goes into {item['bin_type'].lower()} bin usually {bin_color}"
+                bin_name, bin_color = get_bin_info(item)
+                response = f"{item['item']} goes into {bin_name} usually {bin_color}"
                 Logger.log_tts_output(response)
                 self.tts.speak(response)
                 time.sleep(0.3)  # Shorter pause for faster response
+            # Add closing message after all items
+            Logger.log_tts_output("Have a great day!")
+            self.tts.speak("Have a great day!")
     
     
     def run(self):

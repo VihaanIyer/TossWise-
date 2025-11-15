@@ -6,7 +6,7 @@
       "type": "landfill",
       "pos": "leftmost",
       "color": "gray with black lid",
-      "sign": "landfill: nothing except styrofoam and PPE",
+      "sign": "landfill: styrofoam and PPE",
       "conf": 0.95
     },
     {
@@ -15,7 +15,7 @@
       "type": "compost",
       "pos": "second_from_left",
       "color": "green",
-      "sign": "compost: all food, napkins, compostables",
+      "sign": "compost: food, napkins, compostables",
       "conf": 0.95
     },
     {
@@ -24,7 +24,7 @@
       "type": "recycling",
       "pos": "center",
       "color": "blue",
-      "sign": "recycle: all paper, metal, plastic, wrappers",
+      "sign": "recycle: paper, metal, plastic, wrappers",
       "conf": 0.95
     },
     {
@@ -46,6 +46,6 @@
       "conf": 0.95
     }
   ],
-  "scene": "five waste bins in a row with signage above",
-  "raw_response": "{\n  \"bins\": [\n    {\n      \"id\": 0,\n      \"label\": \"left_black\",\n      \"type\": \"landfill\",\n      \"pos\": \"leftmost\",\n      \"color\": \"gray with black lid\",\n      \"sign\": \"landfill: nothing except styrofoam and PPE\",\n      \"conf\": 0.95\n    },\n    {\n      \"id\": 1,\n      \"label\": \"green_compost\",\n      \"type\": \"compost\",\n      \"pos\": \"second_from_left\",\n      \"color\": \"green\",\n      \"sign\": \"compost: all food, napkins, compostables\",\n      \"conf\": 0.95\n    },\n    {\n      \"id\": 2,\n      \"label\": \"blue_recycle\",\n      \"type\": \"recycling\",\n      \"pos\": \"center\",\n      \"color\": \"blue\",\n      \"sign\": \"recycle: all paper, metal, plastic, wrappers\",\n      \"conf\": 0.95\n    },\n    {\n      \"id\": 3,\n      \"label\": \"blue_mixed_paper\",\n      \"type\": \"paper\",\n      \"pos\": \"second_from_right\",\n      \"color\": \"blue\",\n      \"sign\": \"mixed paper: newspapers, magazines, folders\",\n      \"conf\": 0.95\n    },\n    {\n      \"id\": 4,\n      \"label\": \"blue_white_paper\",\n      \"type\": \"paper\",\n      \"pos\": \"rightmost\",\n      \"color\": \"blue\",\n      \"sign\": \"white paper: printer, notebook, envelopes\",\n      \"conf\": 0.95\n    }\n  ],\n  \"scene\": \"five waste bins in a row with signage above\"\n}"
+  "scene": "Five waste bins in a row, labeled for landfill, compost, recycling, mixed paper, and white paper.",
+  "raw_response": "{\n  \"bins\": [\n    {\n      \"id\": 0,\n      \"label\": \"left_black\",\n      \"type\": \"landfill\",\n      \"pos\": \"leftmost\",\n      \"color\": \"gray with black lid\",\n      \"sign\": \"landfill: styrofoam and PPE\",\n      \"conf\": 0.95\n    },\n    {\n      \"id\": 1,\n      \"label\": \"green_compost\",\n      \"type\": \"compost\",\n      \"pos\": \"second_from_left\",\n      \"color\": \"green\",\n      \"sign\": \"compost: food, napkins, compostables\",\n      \"conf\": 0.95\n    },\n    {\n      \"id\": 2,\n      \"label\": \"blue_recycle\",\n      \"type\": \"recycling\",\n      \"pos\": \"center\",\n      \"color\": \"blue\",\n      \"sign\": \"recycle: paper, metal, plastic, wrappers\",\n      \"conf\": 0.95\n    },\n    {\n      \"id\": 3,\n      \"label\": \"blue_mixed_paper\",\n      \"type\": \"paper\",\n      \"pos\": \"second_from_right\",\n      \"color\": \"blue\",\n      \"sign\": \"mixed paper: newspapers, magazines, folders\",\n      \"conf\": 0.95\n    },\n    {\n      \"id\": 4,\n      \"label\": \"blue_white_paper\",\n      \"type\": \"paper\",\n      \"pos\": \"rightmost\",\n      \"color\": \"blue\",\n      \"sign\": \"white paper: printer, notebook, envelopes\",\n      \"conf\": 0.95\n    }\n  ],\n  \"scene\": \"Five waste bins in a row, labeled for landfill, compost, recycling, mixed paper, and white paper.\"\n}"
 }
