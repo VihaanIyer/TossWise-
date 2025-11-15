@@ -10,6 +10,10 @@ from datetime import datetime
 from object_detector import ObjectDetector
 from gemini_classifier import TrashClassifier
 from tts_handler import TTSHandler
+from bin_layout_analyzer import BinLayoutAnalyzer
+
+# Modify this when you want to switch cameras (Continuity Cam often shows as index 1 or 2)
+CAMERA_INDEX = 0
 
 
 class Logger:
@@ -151,6 +155,31 @@ class SmartTrashBin:
             Logger.log_error(str(e), "TrashClassifier initialization")
             raise
         
+        # Dedicated bin layout step (uses hardcoded reference photo inside BinLayoutAnalyzer)
+        self.bin_layout_metadata = None
+        try:
+            Logger.log_system_event("Running bin layout analysis from reference photo...")
+            self.bin_layout_analyzer = BinLayoutAnalyzer(self.classifier)
+            bin_layout_result = self.bin_layout_analyzer.analyze_bins()
+            self.bin_layout_metadata = bin_layout_result
+            self.classifier.update_bin_context(bin_layout_result)
+            identified_bins = len(bin_layout_result.get("bins", [])) if isinstance(bin_layout_result, dict) else len(bin_layout_result or [])
+            Logger.log_system_event(f"Bin layout analysis complete. Identified {identified_bins} bins for contextual classification.")
+        except FileNotFoundError as e:
+            Logger.log_error(str(e), "Bin layout analysis (update BIN_LAYOUT_IMAGE_PATH in bin_layout_analyzer.py)")
+        except Exception as e:
+            Logger.log_error(str(e), "Bin layout analysis")
+        
+        if self.bin_layout_metadata is None:
+            cached_layout = BinLayoutAnalyzer.load_cached_bins()
+            if cached_layout:
+                self.bin_layout_metadata = cached_layout
+                self.classifier.update_bin_context(cached_layout)
+                cached_bins = len(cached_layout.get("bins", [])) if isinstance(cached_layout, dict) else len(cached_layout or [])
+                Logger.log_system_event(f"Loaded {cached_bins} cached bins from bin_layout_metadata.json.")
+            else:
+                Logger.log_system_event("No cached bin layout found. Gemini classifications will run without facility-specific labels.")
+        
         try:
             Logger.log_system_event("Initializing TTS handler...")
             self.tts = TTSHandler()
@@ -237,11 +266,17 @@ class SmartTrashBin:
         """
         Main application loop
         """
-        # Initialize camera
-        cap = cv2.VideoCapture(0)
+        # Initialize camera (set CAMERA_INDEX at top of file to switch feeds)
+        Logger.log_system_event(f"Opening camera index {CAMERA_INDEX}. Change CAMERA_INDEX to target Continuity Camera.")
+        cap = cv2.VideoCapture(CAMERA_INDEX)
         
         if not cap.isOpened():
             print("Error: Could not open camera")
+            Logger.log_error(
+                f"Camera index {CAMERA_INDEX} could not be opened. "
+                "If you're trying to use Continuity Camera, unlock the iPhone and select it in another app.",
+                "Camera initialization"
+            )
             return
         
         # Set camera properties
@@ -362,4 +397,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

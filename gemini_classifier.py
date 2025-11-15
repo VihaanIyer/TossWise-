@@ -167,6 +167,32 @@ BIN COLORS AND RULES:
    - Contaminated items
 
 IMPORTANT: Give DEFINITIVE answers. Say "This goes in [BIN]" or "This should go in [BIN]". Only use uncertain language like "typically" or "usually" if you genuinely cannot determine the correct bin."""
+        self.bin_context = ""
+        self.bin_layout_metadata = None
+    
+    def _ensure_pil_image(self, image):
+        """
+        Convert numpy arrays or file paths to PIL Images for Gemini API calls.
+        """
+        if image is None:
+            return None
+        
+        if isinstance(image, Image.Image):
+            return image
+        
+        # If it's a numpy array, convert from BGR (OpenCV) to RGB
+        if hasattr(image, 'shape'):
+            import numpy as np
+            if len(image.shape) == 3 and image.shape[2] == 3:
+                image_rgb = image[:, :, ::-1]
+                return Image.fromarray(image_rgb)
+            return Image.fromarray(image)
+        
+        # If it's a path-like object
+        if isinstance(image, str):
+            return Image.open(image)
+        
+        raise ValueError("Unsupported image format provided to Gemini classifier.")
     
     def classify_item(self, item_name, context="", image=None):
         """
@@ -183,6 +209,8 @@ IMPORTANT: Give DEFINITIVE answers. Say "This goes in [BIN]" or "This should go 
         prompt = f"{self.system_prompt}\n\nItem detected by camera: {item_name}"
         if context:
             prompt += f"\nContext: {context}"
+        if self.bin_context:
+            prompt += f"\nLocal bin labels: {self.bin_context}"
         prompt += "\n\nLook at the image and determine which bin this item should go into. Consider the material, condition, and type of item."
         
         try:
@@ -259,7 +287,13 @@ IMPORTANT: Give DEFINITIVE answers. Say "This goes in [BIN]" or "This should go 
             items_list = [item['class'] for item in detected_items]
             items_text = f"Note: YOLOv8 object detection suggested these items might be present: {', '.join(items_list)}. However, please look at the ACTUAL IMAGE and identify what trash/waste items are REALLY visible."
         
+        bin_context_text = ""
+        if self.bin_context:
+            bin_context_text = f"Facility bin labels previously identified: {self.bin_context}. Use these actual bin labels/types when describing where each item should go."
+        
         prompt = f"""{self.system_prompt}
+
+{bin_context_text}
 
 {items_text}
 
@@ -571,6 +605,43 @@ List all items with their bin classifications."""
         
         return items_classifications
     
+    def update_bin_context(self, bin_layout_result):
+        """
+        Store bin layout metadata so future classifications can reference the physical bins.
+        """
+        if not bin_layout_result:
+            self.bin_context = ""
+            self.bin_layout_metadata = None
+            return
+        
+        bins = []
+        if isinstance(bin_layout_result, dict):
+            bins = bin_layout_result.get("bins", []) or []
+        elif isinstance(bin_layout_result, list):
+            bins = bin_layout_result
+        
+        summaries = []
+        for idx, bin_info in enumerate(bins, 1):
+            if not isinstance(bin_info, dict):
+                continue
+            label = bin_info.get("bin_label") or f"Bin {idx}"
+            bin_type = bin_info.get("bin_type_guess") or "unknown"
+            color = bin_info.get("bin_color") or ""
+            signage = bin_info.get("signage_text") or ""
+            notes = bin_info.get("additional_notes") or ""
+            
+            summary = f"{label}: {bin_type.upper()}"
+            if color:
+                summary += f" (Color: {color})"
+            if signage:
+                summary += f" Signage: {signage}"
+            if notes:
+                summary += f" Notes: {notes}"
+            summaries.append(summary)
+        
+        self.bin_context = " | ".join(summaries)
+        self.bin_layout_metadata = bin_layout_result
+    
     def answer_question(self, question):
         """
         Answer user questions about recycling/waste disposal
@@ -597,4 +668,3 @@ Provide a clear, concise, and helpful answer."""
             error_msg = f"I'm sorry, I encountered an error: {str(e)}"
             self.last_raw_response = error_msg
             return error_msg
-

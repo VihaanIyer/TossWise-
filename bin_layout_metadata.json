@@ -1,0 +1,56 @@
+{
+  "bins": [
+    {
+      "bin_label": "Left Black Bin",
+      "bin_type_guess": "landfill",
+      "bin_color": "gray bin with black lid",
+      "signage_text": "LANDFILL\nNOTHING goes here except food-grade Styrofoam and disposable PPE",
+      "icon_description": "None",
+      "position_hint": "leftmost",
+      "additional_notes": "Matches the landfill sign above it.",
+      "confidence": 0.95
+    },
+    {
+      "bin_label": "Second Bin",
+      "bin_type_guess": "compost",
+      "bin_color": "green",
+      "signage_text": "COMPOST\nAll food, napkins, and compostables",
+      "icon_description": "food scraps icon",
+      "position_hint": "second from left",
+      "additional_notes": "Matches the compost sign above it.",
+      "confidence": 0.95
+    },
+    {
+      "bin_label": "Third Bin",
+      "bin_type_guess": "recycling",
+      "bin_color": "blue",
+      "signage_text": "RECYCLE\nAll paper, metal cans, foil, plastic bottles, snack wrappers, plastic bags & wrap, most office supplies\nDISPOSABLE PPE IN LANDFILL BIN\nNO PPE IN RECYCLE OR COMPOST BIN",
+      "icon_description": "recycling triangle",
+      "position_hint": "center",
+      "additional_notes": "Matches the plastics & metals sign above it.",
+      "confidence": 0.95
+    },
+    {
+      "bin_label": "Fourth Bin",
+      "bin_type_guess": "mixed",
+      "bin_color": "blue",
+      "signage_text": "MIXED PAPER\nNewspapers, magazines, folders, colored paper, small cardboard",
+      "icon_description": "recycling triangle",
+      "position_hint": "second from right",
+      "additional_notes": "Matches the mixed paper sign above it.",
+      "confidence": 0.95
+    },
+    {
+      "bin_label": "Right Blue Bin",
+      "bin_type_guess": "paper",
+      "bin_color": "blue",
+      "signage_text": "WHITE PAPER\nPrinter paper, notebook paper, and envelopes",
+      "icon_description": "recycling triangle",
+      "position_hint": "rightmost",
+      "additional_notes": "Matches the white paper sign above it.",
+      "confidence": 0.95
+    }
+  ],
+  "scene_notes": "Five bins are lined up, each with a sign above indicating its contents. The bins are for landfill, compost, plastics & metals, mixed paper, and white paper.",
+  "raw_response": "{\n  \"bins\": [\n    {\n      \"bin_label\": \"Left Black Bin\",\n      \"bin_type_guess\": \"landfill\",\n      \"bin_color\": \"gray bin with black lid\",\n      \"signage_text\": \"LANDFILL\\nNOTHING goes here except food-grade Styrofoam and disposable PPE\",\n      \"icon_description\": \"None\",\n      \"position_hint\": \"leftmost\",\n      \"additional_notes\": \"Matches the landfill sign above it.\",\n      \"confidence\": 0.95\n    },\n    {\n      \"bin_label\": \"Second Bin\",\n      \"bin_type_guess\": \"compost\",\n      \"bin_color\": \"green\",\n      \"signage_text\": \"COMPOST\\nAll food, napkins, and compostables\",\n      \"icon_description\": \"food scraps icon\",\n      \"position_hint\": \"second from left\",\n      \"additional_notes\": \"Matches the compost sign above it.\",\n      \"confidence\": 0.95\n    },\n    {\n      \"bin_label\": \"Third Bin\",\n      \"bin_type_guess\": \"recycling\",\n      \"bin_color\": \"blue\",\n      \"signage_text\": \"RECYCLE\\nAll paper, metal cans, foil, plastic bottles, snack wrappers, plastic bags & wrap, most office supplies\\nDISPOSABLE PPE IN LANDFILL BIN\\nNO PPE IN RECYCLE OR COMPOST BIN\",\n      \"icon_description\": \"recycling triangle\",\n      \"position_hint\": \"center\",\n      \"additional_notes\": \"Matches the plastics & metals sign above it.\",\n      \"confidence\": 0.95\n    },\n    {\n      \"bin_label\": \"Fourth Bin\",\n      \"bin_type_guess\": \"mixed\",\n      \"bin_color\": \"blue\",\n      \"signage_text\": \"MIXED PAPER\\nNewspapers, magazines, folders, colored paper, small cardboard\",\n      \"icon_description\": \"recycling triangle\",\n      \"position_hint\": \"second from right\",\n      \"additional_notes\": \"Matches the mixed paper sign above it.\",\n      \"confidence\": 0.95\n    },\n    {\n      \"bin_label\": \"Right Blue Bin\",\n      \"bin_type_guess\": \"paper\",\n      \"bin_color\": \"blue\",\n      \"signage_text\": \"WHITE PAPER\\nPrinter paper, notebook paper, and envelopes\",\n      \"icon_description\": \"recycling triangle\",\n      \"position_hint\": \"rightmost\",\n      \"additional_notes\": \"Matches the white paper sign above it.\",\n      \"confidence\": 0.95\n    }\n  ],\n  \"scene_notes\": \"Five bins are lined up, each with a sign above indicating its contents. The bins are for landfill, compost, plastics & metals, mixed paper, and white paper.\"\n}"
+}
