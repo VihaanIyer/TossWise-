@@ -2,34 +2,34 @@
   "bins": [
     {
       "id": 0,
-      "label": "left_blue",
-      "type": "recycling",
-      "color": "dark blue",
-      "sign": "unclear",
+      "label": "white_bin",
+      "type": "landfill",
+      "color": "white",
+      "sign": "trash",
       "pos": "leftmost",
       "conf": 1
     },
     {
       "id": 1,
-      "label": "green_compost",
-      "type": "compost",
-      "color": "dark green",
-      "sign": "compost: food, napkins, compostables",
-      "pos": "second_from_left",
+      "label": "blue_bin",
+      "type": "recycling",
+      "color": "blue",
+      "sign": "recycling",
+      "pos": "center",
       "conf": 1
     },
     {
       "id": 2,
-      "label": "gray_landfill",
-      "type": "landfill",
-      "color": "light gray",
-      "sign": "landfill: soiled/wet single use disposable PPE",
-      "pos": "center",
+      "label": "green_bin",
+      "type": "compost",
+      "color": "green",
+      "sign": "compost",
+      "pos": "rightmost",
       "conf": 1
     }
   ],
   "location": "atlanta_ga_usa",
   "location_name": "Atlanta, GA, USA",
-  "scene": "three bins in an office setting",
-  "raw_response": "{\n  \"bins\": [\n    {\n      \"id\": 0,\n      \"label\": \"left_blue\",\n      \"type\": \"recycling\",\n      \"pos\": \"leftmost\",\n      \"color\": \"dark blue\",\n      \"sign\": \"unclear\",\n      \"conf\": 0.6\n    },\n    {\n      \"id\": 1,\n      \"label\": \"green_compost\",\n      \"type\": \"compost\",\n      \"pos\": \"second_from_left\",\n      \"color\": \"dark green\",\n      \"sign\": \"compost: food, napkins, compostables\",\n      \"conf\": 0.9\n    },\n    {\n      \"id\": 2,\n      \"label\": \"gray_landfill\",\n      \"type\": \"landfill\",\n      \"pos\": \"center\",\n      \"color\": \"light gray\",\n      \"sign\": \"landfill: soiled/wet single use disposable PPE\",\n      \"conf\": 0.9\n    }\n  ],\n  \"scene\": \"three bins in an office setting\"\n}"
+  "scene": "three bins in a row: landfill, recycling, and compost",
+  "raw_response": "{\n  \"bins\": [\n    {\n      \"id\": 0,\n      \"label\": \"white_bin\",\n      \"type\": \"landfill\",\n      \"pos\": \"leftmost\",\n      \"color\": \"white\",\n      \"sign\": \"trash\",\n      \"conf\": 0.8\n    },\n    {\n      \"id\": 1,\n      \"label\": \"blue_bin\",\n      \"type\": \"recycling\",\n      \"pos\": \"center\",\n      \"color\": \"blue\",\n      \"sign\": \"recycling\",\n      \"conf\": 0.9\n    },\n    {\n      \"id\": 2,\n      \"label\": \"green_bin\",\n      \"type\": \"compost\",\n      \"pos\": \"rightmost\",\n      \"color\": \"green\",\n      \"sign\": \"compost\",\n      \"conf\": 0.9\n    }\n  ],\n  \"scene\": \"three bins in a row: landfill, recycling, and compost\"\n}"
 }

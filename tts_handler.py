@@ -16,15 +16,17 @@ load_dotenv()
 
 
 class TTSHandler:
-    def __init__(self, voice_id=None):
+    def __init__(self, voice_id=None, language='english'):
         """
         Initialize TTS Handler with ElevenLabs (optional) and local fallback
         
         Args:
             voice_id: Optional specific voice ID to use for ElevenLabs
+            language: Language to use ('english' or 'hungarian')
         """
         self.use_elevenlabs = False
         self.client = None
+        self.language = language.lower()
         self.voice_id = voice_id
         
         # Try to initialize ElevenLabs if API key is available
@@ -41,9 +43,14 @@ class TTSHandler:
                 # play is a module, use play.play function
                 self.play_func = play.play
                 
-                # Use voice_id from parameter, env var, or default to provided voice
+                # Use voice_id from parameter, env var, or language-specific default
                 if not self.voice_id:
-                    self.voice_id = os.getenv('ELEVENLABS_VOICE_ID', 'g6xIsTj2HwM6VR4iXFCw')
+                    if self.language == 'hungarian':
+                        # Hungarian voice ID
+                        self.voice_id = '86V9x9hrQds83qf7zaGn'
+                    else:
+                        # English voice ID (default)
+                        self.voice_id = os.getenv('ELEVENLABS_VOICE_ID', 'g6xIsTj2HwM6VR4iXFCw')
                 
                 # Test the voice to see if it works
                 try:
@@ -140,8 +147,24 @@ class TTSHandler:
                     with open(save_to_file, 'wb') as f:
                         f.write(audio_bytes)
                 
-                # Play the audio
-                self.play_func(audio_bytes)
+                # Play the audio - ensure it's blocking so audio doesn't get cut off
+                import time
+                # Small delay to ensure audio system is ready before starting playback
+                time.sleep(0.05)
+                try:
+                    # play.play() should be blocking, but ensure it completes
+                    self.play_func(audio_bytes)
+                    # Small delay after playback to ensure audio system finishes processing
+                    time.sleep(0.1)
+                except Exception as play_error:
+                    print(f"⚠️ Audio playback error: {play_error}, trying fallback")
+                    # Fallback: try without any parameters
+                    try:
+                        self.play_func(audio_bytes)
+                        time.sleep(0.1)
+                    except:
+                        pass
+                
                 print(f"✅ ElevenLabs audio played successfully")
                 return
             except Exception as e:

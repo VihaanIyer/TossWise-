@@ -20,6 +20,84 @@ from bin_layout_analyzer import BinLayoutAnalyzer
 CAMERA_INDEX = 0
 
 
+def get_language_from_location(location):
+    """
+    Determine language based on location.
+    Returns 'hungarian' for Budapest, 'english' for others.
+    """
+    if location and 'budapest' in location.lower():
+        return 'hungarian'
+    return 'english'
+
+
+def get_closing_message(language):
+    """
+    Get closing message in the appropriate language.
+    """
+    if language == 'hungarian':
+        return "Ha van kérdésed, szólj."
+    return "If you have any questions, let me know."
+
+
+def format_item_response(item, bin_name, bin_color, bin_position, language):
+    """
+    Format item classification response in the appropriate language.
+    Handles alternative bins and no-bin-available cases.
+    Uses position (left/middle/right) instead of "usually [color]".
+    """
+    if language == 'hungarian':
+        # Translate colors to Hungarian
+        color_translations = {
+            'blue': 'kék',
+            'green': 'zöld',
+            'black': 'fekete',
+            'grey': 'szürke',
+            'gray': 'szürke',
+            'gray and black': 'szürke és fekete',
+            'black or grey': 'fekete vagy szürke',
+            'black or gray': 'fekete vagy szürke'
+        }
+        # bin_name already contains "kuka" (e.g., "újrahasznosítás kuka")
+        # We need to change "kuka" to "kukába" (into the bin)
+        if ' kuka' in bin_name:
+            bin_name_final = bin_name.replace(' kuka', ' kukába')
+        elif bin_name.endswith('kuka'):
+            bin_name_final = bin_name.replace('kuka', 'kukába')
+        else:
+            bin_name_final = f"{bin_name} kukába"
+        
+        # Handle no bin available case
+        if item.get('no_bin_available'):
+            return item.get('explanation', f"{item['item']} nem mehet egyik kukába sem.")
+        
+        # Handle alternative bin case
+        if item.get('alternative'):
+            return item.get('explanation', f"{item['item']} megy a {bin_name} kukába.")
+        
+        # Translate color
+        color_hungarian = color_translations.get(bin_color.lower(), bin_color)
+        
+        # Use position if available, otherwise fallback to color
+        if bin_position:
+            return f"{item['item']} megy a {color_hungarian} {bin_name_final} {bin_position}"
+        else:
+            return f"{item['item']} megy a {bin_name_final} általában {color_hungarian}"
+    else:  # English
+        # Handle no bin available case
+        if item.get('no_bin_available'):
+            return item.get('explanation', f"{item['item']} can't go into any available bin.")
+        
+        # Handle alternative bin case
+        if item.get('alternative'):
+            return item.get('explanation', f"{item['item']} goes into {bin_name}.")
+        
+        # Use position if available, otherwise fallback to color
+        if bin_position:
+            return f"{item['item']} goes into {bin_color} {bin_name} {bin_position}"
+        else:
+            return f"{item['item']} goes into {bin_name} usually {bin_color}"
+
+
 class Logger:
     """Professional logging system for the smart trash bin"""
     
@@ -151,17 +229,21 @@ class SmartTrashBin:
             Logger.log_error(str(e), "ObjectDetector initialization")
             raise
         
+        # Load bin layout from location-specific JSON file or main metadata file
+        self.bin_layout_metadata = None
+        self.location = os.getenv('BIN_LOCATION', None)  # Can be set via environment variable
+        
+        # Determine language based on location
+        self.language = get_language_from_location(self.location)
+        Logger.log_system_event(f"Language set to: {self.language.upper()} (based on location: {self.location or 'default'})")
+        
         try:
             Logger.log_system_event("Initializing Gemini AI classifier...")
-            self.classifier = TrashClassifier()
+            self.classifier = TrashClassifier(language=self.language)
             Logger.log_system_event("Gemini AI initialized successfully")
         except Exception as e:
             Logger.log_error(str(e), "TrashClassifier initialization")
             raise
-        
-        # Load bin layout from location-specific JSON file or main metadata file
-        self.bin_layout_metadata = None
-        self.location = os.getenv('BIN_LOCATION', None)  # Can be set via environment variable
         
         # Try to load location-specific bin layout first
         if self.location:
@@ -219,7 +301,7 @@ class SmartTrashBin:
         
         try:
             Logger.log_system_event("Initializing TTS handler...")
-            self.tts = TTSHandler()
+            self.tts = TTSHandler(language=self.language)
             Logger.log_system_event("TTS handler initialized")
         except Exception as e:
             Logger.log_error(str(e), "TTSHandler initialization")
@@ -237,7 +319,10 @@ class SmartTrashBin:
         
         # State management
         self.last_detection_time = 0
-        self.detection_cooldown = 1.0  # Reduced for faster response
+        self.detection_cooldown = 2.0  # Cooldown between detections to prevent spam and reduce API calls
+        self.last_trash_check_time = 0
+        self.trash_check_interval = 2.0  # Only check for trash every 2 seconds to reduce lag (increased from 0.5)
+        self.checking_trash = False  # Flag to prevent multiple simultaneous trash checks
         self.current_item = None
         self.current_classifications = []  # Store all classifications
         self.processing_question = False
@@ -357,7 +442,7 @@ class SmartTrashBin:
         Logger.log_system_event(f"Selected best frame from {len(frames)} captures (sharpness score: {best_score:.2f})")
         return best_frame
     
-    def _listen_for_questions(self, duration=10):
+    def _listen_for_questions(self, duration=2):
         """
         Listen for user questions for a specified duration
         
@@ -373,7 +458,7 @@ class SmartTrashBin:
         start_time = time.time()
         while time.time() - start_time < duration and self.listening_for_questions:
             try:
-                question = self.voice_input.listen_once(timeout=2)
+                question = self.voice_input.listen_once(timeout=1)
                 if question:
                     Logger.log_system_event(f"Question detected: {question}")
                     self._handle_question(question)
@@ -381,7 +466,7 @@ class SmartTrashBin:
                     start_time = time.time()  # Reset timer after answering
             except Exception as e:
                 Logger.log_error(str(e), "Question listening")
-                time.sleep(0.2)
+                time.sleep(0.05)  # Optimized delay
         
         self.listening_for_questions = False
         Logger.log_system_event("Question listening period ended")
@@ -433,7 +518,7 @@ class SmartTrashBin:
             # Multiple bags
             Logger.log_tts_output(f"I see {num_bags} trash bags. Let me ask about each one.")
             self.tts.speak(f"I see {num_bags} trash bags. Let me ask about each one.")
-            time.sleep(0.2)
+            time.sleep(0.05)  # Optimized delay
             
             bag_classifications = []
             
@@ -456,7 +541,7 @@ class SmartTrashBin:
                     response = f"Bag {i} goes into the {bin_name} usually {bin_color}."
                     Logger.log_tts_output(response)
                     self.tts.speak(response)
-                    time.sleep(0.15)
+                    time.sleep(0.05)
                     
                     bag_classifications.append({
                         'item': f"Bag {i} ({answer})",
@@ -468,7 +553,7 @@ class SmartTrashBin:
                 else:
                     Logger.log_system_event(f"No answer received for bag {i}.")
                     self.tts.speak(f"I couldn't hear your answer for bag {i}.")
-                    time.sleep(0.15)
+                    time.sleep(0.05)
             
             # Store all bag classifications
             self.current_classifications = bag_classifications
@@ -480,7 +565,7 @@ class SmartTrashBin:
                 self.tts.speak(summary)
         
         # Add closing message
-        closing_msg = "If you have any questions, let me know. If you don't, have a great day."
+        closing_msg = get_closing_message(self.language)
         Logger.log_tts_output(closing_msg)
         self.tts.speak(closing_msg)
     
@@ -500,17 +585,56 @@ class SmartTrashBin:
         answer = self.classifier.answer_question(question, self.current_classifications)
         
         if answer is None:
-            # Question not relevant
-            response = "I can only answer questions about waste disposal and recycling. Please ask me about trash, recycling, or the items I just classified."
-            Logger.log_tts_output(response)
-            self.tts.speak(response)
+            # Question not relevant - don't respond to chit chat
+            Logger.log_system_event("Question not relevant - ignoring chit chat")
+            return  # Silent - don't respond to non-relevant questions
         else:
             # Relevant question - speak the answer
             Logger.log_tts_output(f"Answer: {answer}")
             self.tts.speak(answer)
             # Continue listening for follow-up questions
             if self.listening_for_questions:
-                time.sleep(0.2)  # Brief pause before continuing to listen
+                time.sleep(0.05)  # Optimized delay  # Brief pause before continuing to listen
+    
+    def _check_trash_async(self, frame, check_time):
+        """
+        Check for trash objects in background thread to prevent blocking main loop
+        
+        Args:
+            frame: Camera frame (numpy array in BGR format)
+            check_time: Timestamp when check was initiated
+        """
+        try:
+            # Use Roboflow to detect trash objects (this can take time, so it's in background)
+            trash_detections = self.detector.detect_trash_objects(frame)
+            
+            # Only trigger analysis if trash objects are detected
+            if trash_detections and len(trash_detections) > 0:
+                # Record detection time for timing measurement
+                self.person_detected_time = time.time()
+                Logger.log_system_event(f"Trash objects detected ({len(trash_detections)} items)! Analyzing image...")
+                
+                # Log detected items
+                for det in trash_detections:
+                    Logger.log_system_event(f"  - {det['class']} (confidence: {det['confidence']:.2f})")
+                
+                # Use current frame directly for fastest response
+                snapshot_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                
+                # Analyze image for trash using Gemini Vision (in background thread)
+                Logger.log_system_event("Starting background analysis of image...")
+                self.processing_detection = True
+                # Run analysis in background thread to prevent UI freeze
+                analysis_thread = threading.Thread(
+                    target=self._process_detection_async,
+                    args=(snapshot_rgb,),
+                    daemon=True
+                )
+                analysis_thread.start()
+        except Exception as e:
+            Logger.log_error(str(e), "Background trash detection")
+        finally:
+            self.checking_trash = False
     
     def _process_detection_async(self, frame):
         """
@@ -599,11 +723,26 @@ class SmartTrashBin:
             Logger.log_system_event(f"⏱️  RESPONSE TIME: {response_time:.2f} seconds (person detected → speaking)")
             self.person_detected_time = None  # Reset after logging
         
-        # Helper function to get bin name and color
+        # Helper function to get bin name, color, and position
         def get_bin_info(item):
-            bin_name = item.get('bin_name', item.get('bin_type', 'bin'))
-            bin_color = item.get('bin_color', get_bin_color(item['bin_type']))
-            return bin_name, bin_color
+            # Handle items with no bin available
+            if item.get('no_bin_available'):
+                # Return preferred bin info for display
+                bin_name = item.get('bin_name', 'bin')
+                bin_color = item.get('bin_color', 'N/A')
+                bin_position = item.get('bin_position', None)
+                return bin_name, bin_color, bin_position
+            
+            bin_type = item.get('bin_type')
+            if not bin_type:
+                bin_name = item.get('bin_name', 'bin')
+                bin_color = item.get('bin_color', 'N/A')
+                bin_position = item.get('bin_position', None)
+            else:
+                bin_name = item.get('bin_name', item.get('bin_type', 'bin'))
+                bin_color = item.get('bin_color', get_bin_color(bin_type))
+                bin_position = item.get('bin_position', None)
+            return bin_name, bin_color, bin_position
         
         # Store spoken text for "repeat" functionality
         self.last_spoken_text = []
@@ -611,35 +750,35 @@ class SmartTrashBin:
         if len(classifications) == 1:
             # Single item - natural, fast response
             item = classifications[0]
-            bin_name, bin_color = get_bin_info(item)
-            # Use format: "item goes into bin_name usually color"
-            response = f"{item['item']} goes into {bin_name} usually {bin_color}"
+            bin_name, bin_color, bin_position = get_bin_info(item)
+            # Use format: "item goes into [color] bin_name position"
+            response = format_item_response(item, bin_name, bin_color, bin_position, self.language)
             self.last_spoken_text.append(response)
             Logger.log_tts_output(response)
-            self.tts.speak(response)
+            self.tts.speak(response)  # This is blocking, will wait for audio to finish
             # Add closing message
-            closing_msg = "If you have any questions, let me know. If you don't, have a great day."
+            closing_msg = get_closing_message(self.language)
             self.last_spoken_text.append(closing_msg)
             Logger.log_tts_output(closing_msg)
-            self.tts.speak(closing_msg)
+            self.tts.speak(closing_msg)  # This is blocking, will wait for audio to finish
         elif len(classifications) > 1:
             # Multiple items - speak each one naturally
             for i, item in enumerate(classifications, 1):
-                bin_name, bin_color = get_bin_info(item)
-                response = f"{item['item']} goes into {bin_name} usually {bin_color}"
+                bin_name, bin_color, bin_position = get_bin_info(item)
+                response = format_item_response(item, bin_name, bin_color, bin_position, self.language)
                 self.last_spoken_text.append(response)
                 Logger.log_tts_output(response)
-                self.tts.speak(response)
-                time.sleep(0.15)  # Minimal pause for faster response
+                self.tts.speak(response)  # This is blocking, will wait for audio to finish
+                # No sleep needed - TTS is already blocking
             # Add closing message after all items
-            closing_msg = "If you have any questions, let me know. If you don't, have a great day."
+            closing_msg = get_closing_message(self.language)
             self.last_spoken_text.append(closing_msg)
             Logger.log_tts_output(closing_msg)
-            self.tts.speak(closing_msg)
+            self.tts.speak(closing_msg)  # This is blocking, will wait for audio to finish
         
-        # Listen for questions for 5 seconds after speaking
+        # Listen for questions for 2 seconds after speaking
         if self.voice_input:
-            self._listen_for_questions(5)
+            self._listen_for_questions(2)
     
     
     def run(self):
@@ -670,10 +809,10 @@ class SmartTrashBin:
         
         frame_count = 0
         last_classification_time = 0
-        person_detected_last_frame = False
+        # No longer tracking person detection - using trash detection instead
         
-        Logger.log_system_event("Camera started. YOLOv8 is detecting people only!")
-        Logger.log_system_event("When a person is detected, image will be analyzed for trash using Gemini Vision!")
+        Logger.log_system_event("Camera started. Using Roboflow YOLOv8 for trash detection!")
+        Logger.log_system_event("When trash objects are detected, image will be analyzed using Gemini Vision for accurate classification!")
         Logger.log_system_event("Controls: 'q' to quit")
         
         try:
@@ -698,47 +837,49 @@ class SmartTrashBin:
                 # Flip frame horizontally for mirror effect
                 frame = cv2.flip(frame, 1)
                 
-                # Run YOLOv8 person detection every 3 frames for quicker reactions
+                # Run Roboflow YOLOv8 trash detection with throttling to reduce lag
                 frame_count += 1
-                if frame_count % 3 == 0:
-                    person_detected = self.detector.detect_person(frame)
+                current_time = time.time()
+                time_elapsed = current_time - last_classification_time > self.detection_cooldown
+                trash_check_elapsed = current_time - self.last_trash_check_time > self.trash_check_interval
+                
+                # Only check for trash if:
+                # 1. Enough time has passed since last classification (cooldown)
+                # 2. Enough time has passed since last trash check (throttling to reduce API calls)
+                # 3. We're not already processing a detection
+                # 4. We're not already checking for trash (prevent multiple simultaneous API calls)
+                if not self.processing_detection and not self.checking_trash and time_elapsed and trash_check_elapsed:
+                    # Update last trash check time immediately to prevent rapid calls
+                    self.last_trash_check_time = current_time
+                    self.checking_trash = True
                     
-                    current_time = time.time()
-                    time_elapsed = current_time - last_classification_time > self.detection_cooldown
-                    
-                    # If person just appeared (wasn't there before) or enough time has passed
-                    if person_detected and (not person_detected_last_frame or time_elapsed):
-                        # Record detection time for timing measurement
-                        self.person_detected_time = time.time()
-                        Logger.log_system_event("Person detected! Capturing image for analysis...")
-                        
-                        # Use current frame directly for fastest response (no delay, no selection)
-                        # The frame is already good since we detected person on it
-                        snapshot_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                        
-                        # Analyze image for trash using Gemini Vision (in background thread)
-                        if not self.processing_detection:
-                            Logger.log_system_event("Starting background analysis of image...")
-                            self.processing_detection = True
-                            # Run analysis in background thread to prevent UI freeze
-                            analysis_thread = threading.Thread(
-                                target=self._process_detection_async,
-                                args=(snapshot_rgb,),
-                                daemon=True
-                            )
-                            analysis_thread.start()
-                            last_classification_time = current_time
-                    
-                    person_detected_last_frame = person_detected
-                    
-                    # Draw person detection indicator on frame (silent - no speech)
-                    if person_detected:
-                        status_text = "PERSON DETECTED - Checking for trash..."
-                        if self.processing_detection:
-                            status_text = "PERSON DETECTED - Analyzing image..."
-                        cv2.putText(frame, status_text, 
-                                  (10, 30), 
-                                  cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                    # Run Roboflow detection in background thread to prevent blocking
+                    # Capture current frame for the thread
+                    frame_copy = frame.copy()
+                    trash_check_thread = threading.Thread(
+                        target=self._check_trash_async,
+                        args=(frame_copy, current_time),
+                        daemon=True
+                    )
+                    trash_check_thread.start()
+                
+                # Draw status indicator
+                if self.checking_trash:
+                    status_text = "Checking for trash..."
+                    cv2.putText(frame, status_text, 
+                              (10, 30), 
+                              cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+                elif self.processing_detection:
+                    status_text = "ANALYZING IMAGE..."
+                    cv2.putText(frame, status_text, 
+                              (10, 30), 
+                              cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                
+                # Check for quit key (non-blocking)
+                key = cv2.waitKey(1) & 0xFF
+                if key == ord('q'):
+                    Logger.log_system_event("Quit key pressed. Shutting down...")
+                    break
                 
                 # Show current classification results if available
                 if self.current_classifications:

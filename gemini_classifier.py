@@ -15,12 +15,16 @@ load_dotenv()
 
 
 class TrashClassifier:
-    def __init__(self):
+    def __init__(self, language='english'):
         """
         Initialize Gemini API client and pick a fast, vision-capable model.
         IMPORTANT: Create this ONCE and reuse it.
         Do not re-create TrashClassifier on every frame.
+        
+        Args:
+            language: Language to use for prompts and responses ('english' or 'hungarian')
         """
+        self.language = language.lower()
         api_key = os.getenv('GEMINI_API_KEY')
         if not api_key:
             raise ValueError("GEMINI_API_KEY not found in environment variables")
@@ -59,10 +63,11 @@ class TrashClassifier:
         if self.model is None:
             raise ValueError("Could not initialize any Gemini model. Check your API key and model availability.")
         
-        # Shared config for faster responses - optimized for 1-1.5s response time
+        # Shared config for faster responses - optimized for <1s response time
         self.generation_config_fast = {
-            "temperature": 0.1,  # Lower temperature for faster, more deterministic responses
-            "max_output_tokens": 128,  # Reduced for faster generation
+            "temperature": 0.0,  # Zero temperature for fastest, most deterministic responses
+            "max_output_tokens": 96,  # Further reduced for faster generation
+            "top_p": 0.95,  # Nucleus sampling for faster decoding
         }
         
         # Initialize for logging
@@ -81,10 +86,11 @@ class TrashClassifier:
     # ---------------------- helpers ---------------------- #
     
     @staticmethod
-    def _to_pil_and_downscale(image, max_dim: int = 512) -> Image.Image:
+    def _to_pil_and_downscale(image, max_dim: int = 384) -> Image.Image:
         """
         Convert numpy/OpenCV or PIL image to PIL and downscale to max_dim.
-        Optimized to 512px for faster API calls while maintaining accuracy.
+        Optimized to 384px for faster API calls while maintaining accuracy.
+        Uses smart preprocessing for better quality at smaller size.
         """
         if not isinstance(image, Image.Image):
             if hasattr(image, "shape"):
@@ -101,7 +107,13 @@ class TrashClassifier:
         if max(w, h) > max_dim:
             scale = max_dim / float(max(w, h))
             new_size = (int(w * scale), int(h * scale))
-            image = image.resize(new_size)
+            # Use LANCZOS resampling for better quality at smaller size
+            image = image.resize(new_size, Image.Resampling.LANCZOS)
+        
+        # Enhance image quality for better accuracy
+        # Convert to RGB if needed (some images might be RGBA)
+        if image.mode != 'RGB':
+            image = image.convert('RGB')
         
         return image
     
@@ -174,9 +186,30 @@ CRITICAL: Look at the IMAGE to determine if items are CLEAN or CONTAMINATED. Ana
             color = bin_info.get('color', '')
             sign = bin_info.get('sign', '')
             label = bin_info.get('label', '')
+            pos = bin_info.get('pos', '')
+            
+            # Convert position to readable format
+            if self.language == 'hungarian':
+                if 'left' in pos.lower() or pos.lower() == 'leftmost':
+                    pos_text = 'bal oldalon'
+                elif 'center' in pos.lower() or 'middle' in pos.lower():
+                    pos_text = 'középen'
+                elif 'right' in pos.lower() or pos.lower() == 'rightmost':
+                    pos_text = 'jobb oldalon'
+                else:
+                    pos_text = pos
+            else:
+                if 'left' in pos.lower() or pos.lower() == 'leftmost':
+                    pos_text = 'on the left'
+                elif 'center' in pos.lower() or 'middle' in pos.lower():
+                    pos_text = 'in the middle'
+                elif 'right' in pos.lower() or pos.lower() == 'rightmost':
+                    pos_text = 'on the right'
+                else:
+                    pos_text = pos
             
             # Format bin description
-            bin_desc = f"- {bin_type} ({color}): {sign}"
+            bin_desc = f"- {bin_type} ({color} bin {pos_text}): {sign}"
             if label:
                 bin_desc += f" [Label: {label}]"
             bin_descriptions.append(bin_desc)
@@ -415,20 +448,24 @@ Your answer:"""
                 bin_color = "black or grey"
             
             bin_name = self._get_bin_name_for_type(bin_type)
+            bin_position = self._get_bin_position_for_type(bin_type)
             
             return {
                 'bin_type': bin_type,
                 'bin_name': bin_name,
                 'bin_color': bin_color,
+                'bin_position': bin_position,
                 'explanation': f"Based on the contents ({bag_description}), this bag goes into the {bin_color} {bin_name}."
             }
         except Exception as e:
             print(f"Error classifying bag contents: {e}")
             bin_name = self._get_bin_name_for_type('landfill')
+            bin_position = self._get_bin_position_for_type('landfill')
             return {
                 'bin_type': 'landfill',
                 'bin_name': bin_name,
                 'bin_color': self._get_bin_color_for_type('landfill'),
+                'bin_position': bin_position,
                 'explanation': f"Unable to classify. Please check local recycling guidelines."
             }
     
@@ -449,12 +486,16 @@ Your answer:"""
         except Exception as e:
             print(f"Image conversion failed, continuing without resize: {e}")
         
+        # Build items text in appropriate language
         items_text = ""
         if detected_items:
             items_list = [item['class'] for item in detected_items]
-            items_text = f"Note: YOLOv8 object detection suggested these items might be present: {', '.join(items_list)}. However, please look at the ACTUAL IMAGE and identify what trash/waste items are REALLY visible."
+            if self.language == 'hungarian':
+                items_text = f"Megjegyzés: A YOLOv8 objektumfelismerés ezeket a tárgyakat javasolta: {', '.join(items_list)}. Azonban nézd meg a VALÓDI KÉPET és azonosítsd, hogy milyen szemét/hulladék tárgyak LÁTHATÓK VALÓJÁBAN."
+            else:
+                items_text = f"Note: YOLOv8 object detection suggested these items might be present: {', '.join(items_list)}. However, please look at the ACTUAL IMAGE and identify what trash/waste items are REALLY visible."
         
-        # Build bin descriptions from JSON
+        # Build bin descriptions from JSON in appropriate language
         bin_descriptions = []
         if self.bin_layout:
             print(f"📋 Using {len(self.bin_layout)} configured bins for classification:")
@@ -463,7 +504,29 @@ Your answer:"""
                 color = bin_info.get('color', '')
                 sign = bin_info.get('sign', '')
                 label = bin_info.get('label', '')
-                bin_desc = f"- {bin_type} ({color}): {sign}"
+                
+                if self.language == 'hungarian':
+                    # Translate bin types to Hungarian
+                    bin_translations = {
+                        'RECYCLING': 'ÚJRAHASZNOSÍTÁS',
+                        'COMPOST': 'KOMPOSZT',
+                        'LANDFILL': 'SZEMÉTLERAKÓ'
+                    }
+                    bin_type_display = bin_translations.get(bin_type, bin_type)
+                    # Translate colors to Hungarian
+                    color_translations = {
+                        'blue': 'kék',
+                        'green': 'zöld',
+                        'black': 'fekete',
+                        'grey': 'szürke',
+                        'gray': 'szürke',
+                        'gray and black': 'szürke és fekete'
+                    }
+                    color_display = color_translations.get(color.lower(), color)
+                    bin_desc = f"- {bin_type_display} ({color_display}): {sign}"
+                else:
+                    bin_desc = f"- {bin_type} ({color}): {sign}"
+                
                 if label:
                     bin_desc += f" [Label: {label}]"
                 bin_descriptions.append(bin_desc)
@@ -471,13 +534,48 @@ Your answer:"""
         else:
             # Fallback descriptions
             print("⚠️ No bin layout configured, using default bins")
-            bin_descriptions = [
-                "- RECYCLING (blue): Clean recyclable materials",
-                "- COMPOST (green): Organic food waste",
-                "- LANDFILL (black/grey): Contaminated or non-recyclable items"
-            ]
+            if self.language == 'hungarian':
+                bin_descriptions = [
+                    "- ÚJRAHASZNOSÍTÁS (kék): Tiszta újrahasznosítható anyagok",
+                    "- KOMPOSZT (zöld): Szerves élelmiszer hulladék",
+                    "- SZEMÉTLERAKÓ (fekete/szürke): Szennyezett vagy nem újrahasznosítható tárgyak"
+                ]
+            else:
+                bin_descriptions = [
+                    "- RECYCLING (blue): Clean recyclable materials",
+                    "- COMPOST (green): Organic food waste",
+                    "- LANDFILL (black/grey): Contaminated or non-recyclable items"
+                ]
         
-        prompt = f"""EXAMINE IMAGE. Identify TRASH/WASTE only. IGNORE: phones, hats, gloves, wallets, bags, personal items.
+        # Build language-specific prompt
+        if self.language == 'hungarian':
+            prompt = f"""Elemezd a képet. Csak SZEMÉT/HULLADÉK azonosítása. FIGYELMEN KÍVÜL: telefonok, sapkák, kesztyűk, pénztárcák, táskák, személyes tárgyak.
+
+{items_text}
+
+KUKÁK:
+{chr(10).join(bin_descriptions)}
+
+SZABÁLYOK:
+- Vizuálisan ellenőrizd minden tárgy ÁLLAPOTÁT (tiszta vs szennyezett)
+- Tiszta újrahasznosítható → újrahasznosítás, Étel/szerves → komposzt, Szennyezett/nem újrahasznosítható → szemétlerakó
+- Legyél pontos: ellenőrizd az anyagot és szennyezettségi szintet
+
+FONTOS: VÁLASZOLJ KIZÁRÓLAG MAGYARUL!
+
+FORMÁTUM: [tárgy] megy a [color] [bin_type] kukába [position]
+
+FONTOS: Ha látsz szemét tárgyakat, sorold fel őket egy sorban ebben a formátumban.
+Ha NINCS szemét tárgy, válaszolj: "Nincs szemét tárgy"
+
+Példák:
+- tiszta műanyag villa → "műanyag villa megy a kék újrahasznosítás kukába bal oldalon"
+- szennyezett műanyag villa → "szennyezett műanyag villa megy a fekete szemétlerakó kukába jobb oldalon"
+- pizza → "pizza megy a zöld komposzt kukába középen"
+
+Sorold fel az összes talált szemét tárgyat (egy sorban):"""
+        else:  # English (default)
+            prompt = f"""Analyze image. Identify ONLY trash/waste items. IGNORE: phones, hats, gloves, wallets, bags, personal items.
 
 {items_text}
 
@@ -485,18 +583,21 @@ BINS:
 {chr(10).join(bin_descriptions)}
 
 RULES:
-- Check if items are CLEAN or CONTAMINATED from image
-- Match items to bins based on bin rules above
+- Visually inspect each item's CONDITION (clean vs contaminated)
 - Clean recyclables → recycling, Food/organic → compost, Contaminated/non-recyclable → landfill
+- Be precise: check actual material and contamination level
 
-FORMAT: [item] goes into [bin_type] bin usually [color]
+FORMAT: [item] goes into [color] [bin_type] bin [position]
+
+IMPORTANT: If you see trash items, list them one per line in this exact format.
+If you see NO trash items, respond with: "No trash items found"
 
 Examples:
-- clean plastic fork → "plastic fork goes into recycle bin usually blue"
-- dirty plastic fork → "dirty plastic fork goes into landfill usually black"
-- pizza → "pizza goes into compost usually green"
+- clean plastic fork → "plastic fork goes into blue recycling bin on the left"
+- dirty plastic fork → "dirty plastic fork goes into black landfill bin on the right"
+- pizza → "pizza goes into green compost bin in the middle"
 
-List all trash items:"""
+List all trash items found (one per line):"""
         
         # Log the prompt being sent (first 500 chars for brevity)
         prompt_preview = prompt[:500] + "..." if len(prompt) > 500 else prompt
@@ -533,7 +634,7 @@ List all trash items:"""
                         print(f"⚠️ Vision API failed, using text-only: {error_str[:100]}")
                     
                     # Use text-only classification - fast and natural
-                    # Build bin descriptions from JSON
+                    # Build bin descriptions from JSON in appropriate language
                     bin_desc_text = ""
                     if self.bin_layout:
                         bin_list = []
@@ -541,14 +642,49 @@ List all trash items:"""
                             bin_type = bin_info.get('type', '').upper()
                             color = bin_info.get('color', '')
                             sign = bin_info.get('sign', '')
-                            bin_list.append(f"- {bin_type} ({color}): {sign}")
+                            if self.language == 'hungarian':
+                                bin_translations = {
+                                    'RECYCLING': 'ÚJRAHASZNOSÍTÁS',
+                                    'COMPOST': 'KOMPOSZT',
+                                    'LANDFILL': 'SZEMÉTLERAKÓ'
+                                }
+                                color_translations = {
+                                    'blue': 'kék',
+                                    'green': 'zöld',
+                                    'black': 'fekete',
+                                    'grey': 'szürke',
+                                    'gray': 'szürke',
+                                    'gray and black': 'szürke és fekete'
+                                }
+                                bin_type_display = bin_translations.get(bin_type, bin_type)
+                                color_display = color_translations.get(color.lower(), color)
+                                bin_list.append(f"- {bin_type_display} ({color_display}): {sign}")
+                            else:
+                                bin_list.append(f"- {bin_type} ({color}): {sign}")
                         bin_desc_text = "\n".join(bin_list)
                     else:
-                        bin_desc_text = """- RECYCLING = blue bin
+                        if self.language == 'hungarian':
+                            bin_desc_text = """- ÚJRAHASZNOSÍTÁS = kék kuka
+- KOMPOSZT = zöld kuka
+- SZEMÉTLERAKÓ = fekete vagy szürke kuka"""
+                        else:
+                            bin_desc_text = """- RECYCLING = blue bin
 - COMPOST = green bin  
 - LANDFILL = black or grey bin"""
                     
-                    text_prompt = f"""Quickly classify these items. Format: [item] goes into [bin_type] bin usually [color]
+                    if self.language == 'hungarian':
+                        text_prompt = f"""Gyorsan osztályozd ezeket a tárgyakat. Formátum: [tárgy] megy a [bin_type] kukába általában [color]
+
+KRITIKUS: Csak SZEMÉT/HULLADÉK tárgyakat osztályozz. FIGYELMEN KÍVÜL: személyes tárgyak (telefonok, sapkák, kesztyűk, pénztárcák, kulcsok, táskák, stb.).
+
+ELÉRHETŐ KUKÁK (használd ezeket a szabályokat):
+{bin_desc_text}
+
+Tárgyak: {items_text}
+
+Válaszolj gyorsan KIZÁRÓLAG MAGYARUL formátumban: [tárgy] megy a [bin_type] kukába általában [color]"""
+                    else:
+                        text_prompt = f"""Quickly classify these items. Format: [item] goes into [bin_type] bin usually [color]
 
 CRITICAL: ONLY classify items that are TRASH/WASTE. IGNORE personal items (phones, caps, beanies, wallets, keys, bags, etc.).
 
@@ -579,7 +715,7 @@ Respond fast in format: [item] goes into [bin_type] bin usually [color]"""
             else:
                 # Text-only model - fast and natural
                 print("⚠️ Model doesn't support vision, using text-only classification")
-                # Build bin descriptions from JSON
+                # Build bin descriptions from JSON in appropriate language
                 bin_desc_text = ""
                 if self.bin_layout:
                     bin_list = []
@@ -587,14 +723,49 @@ Respond fast in format: [item] goes into [bin_type] bin usually [color]"""
                         bin_type = bin_info.get('type', '').upper()
                         color = bin_info.get('color', '')
                         sign = bin_info.get('sign', '')
-                        bin_list.append(f"- {bin_type} ({color}): {sign}")
+                        if self.language == 'hungarian':
+                            bin_translations = {
+                                'RECYCLING': 'ÚJRAHASZNOSÍTÁS',
+                                'COMPOST': 'KOMPOSZT',
+                                'LANDFILL': 'SZEMÉTLERAKÓ'
+                            }
+                            color_translations = {
+                                'blue': 'kék',
+                                'green': 'zöld',
+                                'black': 'fekete',
+                                'grey': 'szürke',
+                                'gray': 'szürke',
+                                'gray and black': 'szürke és fekete'
+                            }
+                            bin_type_display = bin_translations.get(bin_type, bin_type)
+                            color_display = color_translations.get(color.lower(), color)
+                            bin_list.append(f"- {bin_type_display} ({color_display}): {sign}")
+                        else:
+                            bin_list.append(f"- {bin_type} ({color}): {sign}")
                     bin_desc_text = "\n".join(bin_list)
                 else:
-                    bin_desc_text = """- RECYCLING = blue bin
+                    if self.language == 'hungarian':
+                        bin_desc_text = """- ÚJRAHASZNOSÍTÁS = kék kuka
+- KOMPOSZT = zöld kuka
+- SZEMÉTLERAKÓ = fekete vagy szürke kuka"""
+                    else:
+                        bin_desc_text = """- RECYCLING = blue bin
 - COMPOST = green bin
 - LANDFILL = black or grey bin"""
                 
-                text_prompt = f"""Quickly classify these items. Format: [item] goes into [bin_type] bin usually [color]
+                if self.language == 'hungarian':
+                    text_prompt = f"""Gyorsan osztályozd ezeket a tárgyakat. Formátum: [tárgy] megy a [bin_type] kukába általában [color]
+
+KRITIKUS: Csak SZEMÉT/HULLADÉK tárgyakat osztályozz. FIGYELMEN KÍVÜL: személyes tárgyak (telefonok, sapkák, kesztyűk, pénztárcák, kulcsok, táskák, stb.).
+
+ELÉRHETŐ KUKÁK (használd ezeket a szabályokat):
+{bin_desc_text}
+
+Tárgyak: {items_text}
+
+Válaszolj gyorsan KIZÁRÓLAG MAGYARUL formátumban: [tárgy] megy a [bin_type] kukába általában [color]"""
+                else:
+                    text_prompt = f"""Quickly classify these items. Format: [item] goes into [bin_type] bin usually [color]
 
 CRITICAL: ONLY classify items that are TRASH/WASTE. IGNORE personal items (phones, caps, beanies, wallets, keys, bags, etc.).
 
@@ -626,11 +797,106 @@ Respond fast in format: [item] goes into [bin_type] bin usually [color]"""
             # Store raw response for logging
             self.last_raw_response = response_text
             
-            # Check if response indicates no trash found
+            # Check if response indicates no trash found (both English and Hungarian)
+            # Only check for clear "no trash" statements, not just any occurrence of "no"
             response_lower = response_text.lower()
-            if any(phrase in response_lower for phrase in ['no trash', 'no items', 'no waste', 'nothing', 'no visible']):
-                # No trash found - return empty list
+            no_trash_phrases = [
+                'no trash items', 'no waste items', 'no items found', 
+                'no trash found', 'no waste found', 'nothing to classify',
+                'i see no trash', 'i don\'t see any', 'there is no trash', 'there are no items',
+                'cannot see any', 'can\'t see any', 'unable to see any',
+                'no trash', 'no items', 'no waste'  # Only at start or as standalone
+            ]
+            if self.language == 'hungarian':
+                no_trash_phrases.extend([
+                    'nincs szemét tárgy', 'nincs hulladék tárgy', 'nincs találat',
+                    'nem látok szemét', 'nem látom a szemét', 'nincs itt semmi',
+                    'nincs szemét', 'nincs tárgy', 'nincs hulladék'  # Only clear statements
+                ])
+            
+            # Check entire response - but only if it's a clear "no trash" statement
+            # Don't trigger on responses that contain "no" but also have items
+            response_starts_with_no = any(response_lower.strip().startswith(phrase) for phrase in [
+                'no trash', 'no items', 'no waste', 'nincs szemét', 'nincs tárgy', 'nincs hulladék'
+            ])
+            response_contains_clear_no = any(phrase in response_lower for phrase in [
+                'no trash items', 'no waste items', 'no items found', 'no trash found',
+                'nincs szemét tárgy', 'nincs hulladék tárgy', 'nincs találat'
+            ])
+            
+            # Only return empty if it's clearly a "no trash" response
+            if response_starts_with_no or (response_contains_clear_no and len(response_text.split()) < 10):
+                # Short response with clear "no trash" - return empty
+                print("✅ No trash items detected in response")
                 return []
+            
+            # Helper function to validate item names
+            def is_valid_item_name(item_name):
+                """
+                Validate that an extracted item name is actually a valid trash item,
+                not a common word, negative phrase, or explanation text.
+                """
+                if not item_name or len(item_name.strip()) < 2:
+                    return False
+                
+                item_lower = item_name.lower().strip()
+                
+                # Reject common words and phrases
+                invalid_words = [
+                    # English
+                    'no', 'not', 'none', 'nothing', 'this', 'that', 'these', 'those',
+                    'note', 'note:', 'note that', 'there', 'here', 'where', 'what',
+                    'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been',
+                    'can', 'cannot', 'can\'t', 'could', 'should', 'would', 'will',
+                    'i', 'you', 'he', 'she', 'it', 'we', 'they', 'me', 'him', 'her',
+                    'see', 'seen', 'look', 'found', 'find', 'check', 'analyze',
+                    'image', 'picture', 'photo', 'frame', 'item', 'items', 'object',
+                    'trash', 'waste', 'garbage', 'bin', 'bins', 'recycling', 'compost',
+                    'landfill', 'goes', 'go', 'going', 'into', 'in', 'to', 'the',
+                    # Hungarian
+                    'nem', 'nincs', 'nincsen', 'semmi', 'ez', 'az', 'ezek', 'azok',
+                    'itt', 'ott', 'ahol', 'ami', 'amit', 'amely', 'amelyik',
+                    'látok', 'látom', 'lát', 'találok', 'találom', 'található',
+                    'kép', 'képben', 'képen', 'tárgy', 'tárgyak', 'szemét', 'hulladék',
+                    'kuka', 'kukák', 'újrahasznosítás', 'komposzt', 'szemétlerakó',
+                    'megy', 'megy a', 'megyek', 'megyünk'
+                ]
+                
+                # Check if item is a single invalid word
+                if item_lower in invalid_words:
+                    return False
+                
+                # Check if item starts with invalid words (e.g., "no trash", "ez nem")
+                for invalid in invalid_words:
+                    if item_lower.startswith(invalid + ' ') or item_lower == invalid:
+                        return False
+                
+                # Check for negative phrases
+                negative_patterns = [
+                    r'^(no|not|nem|nincs|nincsen)\s+',
+                    r'^(this|that|ez|az)\s+(doesn\'t|does not|nem|nincs)',
+                    r'^(i|we|én|mi)\s+(don\'t|do not|nem|nincs)',
+                    r'^(cannot|cannot|can\'t|nem)\s+',
+                ]
+                for pattern in negative_patterns:
+                    if re.match(pattern, item_lower):
+                        return False
+                
+                # Item name should be at least 2 characters (allow short names like "cup", "can")
+                if len(item_lower.replace('-', '').replace(' ', '')) < 2:
+                    return False
+                
+                # Allow common trash item words even if they're short
+                valid_trash_words = [
+                    'cup', 'can', 'bag', 'box', 'jar', 'lid', 'cap', 'bottle', 'fork',
+                    'knife', 'spoon', 'plate', 'napkin', 'paper', 'cardboard', 'pizza',
+                    'apple', 'banana', 'bottle', 'wrapper', 'container', 'bottle',
+                    'pohár', 'doboz', 'táska', 'pohár', 'tálca', 'szalvéta', 'papír'
+                ]
+                if item_lower in valid_trash_words:
+                    return True
+                
+                return True
             
             # Parse response - look for natural format: "item goes into bin_type bin usually color"
             items_classifications = []
@@ -641,40 +907,114 @@ Respond fast in format: [item] goes into [bin_type] bin usually [color]"""
                 if not line or line.startswith('#'):
                     continue
                 
-                # Accept lines with or without dash prefix, or lines with "goes into/goes in"
-                has_dash = line.startswith('-')
-                has_goes_into = 'goes into' in line.lower() or 'goes in' in line.lower()
-                has_colon = ':' in line
+                # Check if this line indicates "no trash" before parsing
+                line_lower = line.lower()
+                # Only skip if line clearly says "no trash" and doesn't contain item format
+                line_says_no_trash = any(phrase in line_lower for phrase in [
+                    'no trash items', 'no waste items', 'no items found',
+                    'nincs szemét tárgy', 'nincs hulladék tárgy'
+                ])
+                has_item_format = 'goes into' in line_lower or 'megy a' in line_lower
                 
-                if not (has_dash or has_goes_into or has_colon):
+                if line_says_no_trash and not has_item_format:
+                    # Skip this line - it's saying no trash
+                    continue
+                
+                # Store original line for dash check (before stripping)
+                original_line = line
+                
+                # Stricter line acceptance: must have explicit format indicators
+                # Accept lines with "goes into/goes in" (English) or "megy a" (Hungarian)
+                # OR lines with dash + colon format (item: bin_type)
+                has_goes_into = 'goes into' in line_lower or 'goes in' in line_lower
+                has_megy_a = 'megy a' in line_lower  # Hungarian
+                has_dash_colon = original_line.startswith('-') and ':' in original_line
+                
+                # Only accept lines that match expected formats
+                if not (has_goes_into or has_megy_a or has_dash_colon):
                     continue
                 
                 # Remove leading dash if present
                 line = line.lstrip('-').strip()
+                line_lower = line.lower()  # Update after stripping
                 
-                # Parse natural format: "item goes into bin_type bin usually color"
+                # Parse natural format: "item goes into bin_type bin usually color" (English)
+                # Or: "tárgy megy a bin_type kukába általában color" (Hungarian)
                 # Or: "item: bin_type - explanation"
-                line_lower = line.lower()
                 
-                # Extract bin type first
+                # Extract bin type first - check both English and Hungarian
                 bin_type = "landfill"  # default
-                if "recycle" in line_lower or "recycling" in line_lower:
-                    bin_type = "recycling"
-                elif "compost" in line_lower:
-                    bin_type = "compost"
-                elif "landfill" in line_lower or "trash" in line_lower:
-                    bin_type = "landfill"
+                if self.language == 'hungarian':
+                    # Hungarian bin type detection
+                    if "újrahasznosítás" in line_lower or "recycle" in line_lower or "recycling" in line_lower:
+                        bin_type = "recycling"
+                    elif "komposzt" in line_lower or "compost" in line_lower:
+                        bin_type = "compost"
+                    elif "szemétlerakó" in line_lower or "landfill" in line_lower or "trash" in line_lower:
+                        bin_type = "landfill"
+                else:
+                    # English bin type detection
+                    if "recycle" in line_lower or "recycling" in line_lower:
+                        bin_type = "recycling"
+                    elif "compost" in line_lower:
+                        bin_type = "compost"
+                    elif "landfill" in line_lower or "trash" in line_lower:
+                        bin_type = "landfill"
                 
                 # Extract item name and create natural explanation
                 item_name = ""
                 explanation = ""
                 
-                # Pattern 1: "item goes into bin_type bin usually color"
-                if "goes into" in line_lower or "goes in" in line_lower:
-                    # Split on "goes into" or "goes in"
+                # Pattern 1: "item goes into bin_type bin usually color" (English)
+                # Pattern 1b: "tárgy megy a bin_type kukába általában color" (Hungarian)
+                if self.language == 'hungarian' and "megy a" in line_lower:
+                    # Hungarian format: "tárgy megy a bin_type kukába általában color"
+                    # Check for negative phrases first
+                    if any(neg in line_lower for neg in ['nem megy', 'nincs', 'nincsen', 'semmi']):
+                        continue  # Skip negative statements
+                    
+                    parts = re.split(r'megy a', line_lower, 1)
+                    if len(parts) >= 2:
+                        item_name = parts[0].strip()
+                        
+                        # Validate item name before proceeding
+                        if not is_valid_item_name(item_name):
+                            continue
+                        
+                        rest = parts[-1].strip()
+                        
+                        # Extract color if mentioned (Hungarian)
+                        color = ""
+                        if "kék" in rest:
+                            color = "kék"
+                        elif "zöld" in rest:
+                            color = "zöld"
+                        elif "fekete" in rest or "szürke" in rest:
+                            color = "fekete vagy szürke"
+                        
+                        # Extract bin type from rest if not already found
+                        if bin_type == "landfill" and "újrahasznosítás" in rest:
+                            bin_type = "recycling"
+                        elif bin_type == "landfill" and "komposzt" in rest:
+                            bin_type = "compost"
+                        elif bin_type == "landfill" and "szemétlerakó" in rest:
+                            bin_type = "landfill"
+                        
+                        explanation = f"Ez megy a {bin_type} kukába."
+                elif "goes into" in line_lower or "goes in" in line_lower:
+                    # English format: Split on "goes into" or "goes in"
+                    # Check for negative phrases first
+                    if any(neg in line_lower for neg in ['doesn\'t go', 'does not go', 'cannot go', 'can\'t go', 'no ']):
+                        continue  # Skip negative statements
+                    
                     parts = re.split(r'goes (into|in)', line_lower, 1)
                     if len(parts) >= 2:
                         item_name = parts[0].strip()
+                        
+                        # Validate item name before proceeding
+                        if not is_valid_item_name(item_name):
+                            continue
+                        
                         rest = parts[-1].strip()
                         
                         # Extract color if mentioned
@@ -692,12 +1032,21 @@ Respond fast in format: [item] goes into [bin_type] bin usually [color]"""
                         else:
                             explanation = f"This goes in the {bin_type} bin."
                 
-                # Pattern 2: "item: bin_type - explanation" (fallback)
-                elif ':' in line:
+                # Pattern 2: "item: bin_type - explanation" (fallback, but stricter)
+                elif has_dash_colon and ':' in line:
                     parts = line.split(':', 1)
                     if len(parts) == 2:
                         item_name = parts[0].strip()
+                        
+                        # Validate item name before proceeding
+                        if not is_valid_item_name(item_name):
+                            continue
+                        
                         rest = parts[1].strip()
+                        
+                        # Skip if rest contains "no trash" indicators
+                        if any(phrase in rest.lower() for phrase in no_trash_phrases):
+                            continue
                         
                         # Extract color
                         color = ""
@@ -714,70 +1063,69 @@ Respond fast in format: [item] goes into [bin_type] bin usually [color]"""
                             explanation = f"This goes in the {color} {bin_type} bin."
                         else:
                             explanation = rest if rest else f"This goes in the {bin_type} bin."
+                else:
+                    # No valid pattern matched, skip this line
+                    continue
                 
-                # If we found an item, add it (only if bin type exists in current layout)
-                if item_name:
+                # If we found an item, validate and add it (only if bin type exists in current layout)
+                if item_name and is_valid_item_name(item_name):
                     # Validate that this bin type exists in current bin_layout
                     if self._bin_type_exists(bin_type):
                         # Get bin name/label from bin_layout
                         bin_name = self._get_bin_name_for_type(bin_type)
                         bin_color = self._get_bin_color_for_type(bin_type)
-                        print(f"✅ Classified '{item_name}' → {bin_type.upper()} bin (Color: {bin_color})")
+                        bin_position = self._get_bin_position_for_type(bin_type)
+                        print(f"✅ Classified '{item_name}' → {bin_type.upper()} bin (Color: {bin_color}, Position: {bin_position})")
                         items_classifications.append({
                             'item': item_name,
                             'bin_type': bin_type,
                             'bin_name': bin_name,
                             'bin_color': bin_color,
+                            'bin_position': bin_position,
                             'explanation': explanation if explanation else f"This goes in the {bin_type} bin."
                         })
                     else:
-                        # Bin type doesn't exist - skip this classification
-                        print(f"⚠️ Skipping classification to {bin_type} - bin not available in current layout")
-                        print(f"   Available bins: {', '.join([b.get('type', 'unknown') for b in (self.bin_layout or [])])}")
+                        # Bin type doesn't exist - check if item can go into any available bin
+                        print(f"⚠️ Preferred bin '{bin_type}' not available. Checking compatibility with available bins...")
+                        alternative_result = self._check_alternative_bin(item_name, bin_type, image)
+                        if alternative_result:
+                            items_classifications.append(alternative_result)
+                        else:
+                            # Item can't go into any available bin
+                            preferred_bin_name = self._get_bin_name_for_type(bin_type)
+                            if self.language == 'hungarian':
+                                explanation = f"Ez nem mehet egyik kukába sem, amit itt találsz. Keresd meg a legközelebbi {preferred_bin_name}."
+                            else:
+                                explanation = f"This can't go into any of the trash bins you have. You have to find the closest {preferred_bin_name}."
+                            
+                            items_classifications.append({
+                                'item': item_name,
+                                'bin_type': None,  # No bin available
+                                'bin_name': preferred_bin_name,
+                                'bin_color': self._get_bin_color_for_type(bin_type),
+                                'bin_position': None,  # No position for unavailable bin
+                                'explanation': explanation,
+                                'no_bin_available': True
+                            })
             
-            # If no structured items found, try to extract from whole response
+            # If no structured items found, check if response might have items in different format
             if not items_classifications:
-                response_lower = response_text.lower()
-                bin_type = "landfill"
-                if "recycle" in response_lower or "recycling" in response_lower:
-                    bin_type = "recycling"
-                elif "compost" in response_lower:
-                    bin_type = "compost"
+                # Log the raw response for debugging
+                print(f"⚠️ No items parsed. Raw response: {response_text[:200]}...")
                 
-                # Try to extract item name from detected items or response
-                item_name = detected_items[0]['class'] if detected_items else "item"
-                if detected_items:
-                    item_name = detected_items[0]['class']
+                # Check if response contains bin types but no items were parsed
+                # This might indicate a parsing issue, not necessarily "no trash"
+                has_bin_mentions = any(word in response_lower for word in [
+                    'recycling', 'compost', 'landfill', 'recycle',
+                    'újrahasznosítás', 'komposzt', 'szemétlerakó'
+                ])
+                
+                if has_bin_mentions:
+                    print("⚠️ Response mentions bins but no items parsed - possible parsing issue")
                 else:
-                    # Try to find item name in response
-                    words = response_text.split()
-                    if words:
-                        item_name = words[0]
+                    print("✅ No trash items detected in response")
                 
-                # Extract color
-                color = ""
-                if "blue" in response_lower:
-                    color = "blue"
-                elif "green" in response_lower:
-                    color = "green"
-                elif "black" in response_lower or "grey" in response_lower or "gray" in response_lower:
-                    color = "black or grey"
-                
-                # Only add if bin type exists in current layout
-                if self._bin_type_exists(bin_type):
-                    explanation = f"This goes in the {color} {bin_type} bin." if color else f"This goes in the {bin_type} bin."
-                    
-                    # Get bin name/label from bin_layout
-                    bin_name = self._get_bin_name_for_type(bin_type)
-                    items_classifications.append({
-                        'item': item_name,
-                        'bin_type': bin_type,
-                        'bin_name': bin_name,
-                        'bin_color': color if color else self._get_bin_color_for_type(bin_type),
-                        'explanation': explanation
-                    })
-                else:
-                    print(f"⚠️ Skipping classification to {bin_type} - bin not available in current layout")
+                return []
             
             return items_classifications
         except Exception as e:
@@ -785,10 +1133,12 @@ Respond fast in format: [item] goes into [bin_type] bin usually [color]"""
             item_name = detected_items[0]['class'] if detected_items else "item"
             # Return as list for consistency
             bin_name = self._get_bin_name_for_type('landfill')
+            bin_position = self._get_bin_position_for_type('landfill')
             return [{
                 'bin_type': 'landfill',
                 'bin_name': bin_name,
                 'bin_color': self._get_bin_color_for_type('landfill'),
+                'bin_position': bin_position,
                 'explanation': f"Unable to classify from image. Please check local recycling guidelines.",
                 'item': item_name
             }]
@@ -806,27 +1156,186 @@ Respond fast in format: [item] goes into [bin_type] bin usually [color]"""
                 return True
         return False
     
+    def _check_alternative_bin(self, item_name, preferred_bin_type, image=None):
+        """
+        Check if an item can go into any available bin when preferred bin isn't available.
+        Returns classification dict if >60% confidence, None otherwise.
+        """
+        if not self.bin_layout or len(self.bin_layout) == 0:
+            return None
+        
+        # Get available bin types
+        available_bins = [bin_info.get('type', '').lower() for bin_info in self.bin_layout]
+        if not available_bins:
+            return None
+        
+        # Build prompt to check compatibility
+        available_bin_descriptions = []
+        for bin_info in self.bin_layout:
+            bin_type = bin_info.get('type', '').upper()
+            color = bin_info.get('color', '')
+            sign = bin_info.get('sign', '')
+            if self.language == 'hungarian':
+                bin_translations = {
+                    'RECYCLING': 'ÚJRAHASZNOSÍTÁS',
+                    'COMPOST': 'KOMPOSZT',
+                    'LANDFILL': 'SZEMÉTLERAKÓ'
+                }
+                color_translations = {
+                    'blue': 'kék',
+                    'green': 'zöld',
+                    'black': 'fekete',
+                    'grey': 'szürke',
+                    'gray': 'szürke',
+                    'gray and black': 'szürke és fekete'
+                }
+                bin_type_display = bin_translations.get(bin_type, bin_type)
+                color_display = color_translations.get(color.lower(), color)
+                available_bin_descriptions.append(f"- {bin_type_display} ({color_display}): {sign}")
+            else:
+                available_bin_descriptions.append(f"- {bin_type} ({color}): {sign}")
+        
+        preferred_bin_name = self._get_bin_name_for_type(preferred_bin_type)
+        
+        if self.language == 'hungarian':
+            prompt = f"""Elemezd: A "{item_name}" tárgy általában a {preferred_bin_name} kukába megy, de ez a kuka nem elérhető.
+
+ELÉRHETŐ KUKÁK:
+{chr(10).join(available_bin_descriptions)}
+
+KÉRDÉS: A "{item_name}" mehet-e valamelyik elérhető kukába? Válaszolj egy számot 0-100 között, ahol:
+- 0-59: NEM mehet egyik elérhető kukába sem
+- 60-100: IGEN, mehet egy elérhető kukába (melyik?)
+
+Válasz formátum: [szám]% - [igen/nem] - [ha igen, melyik kuka?]"""
+        else:
+            prompt = f"""Analyze: The item "{item_name}" normally goes into {preferred_bin_name}, but that bin is not available.
+
+AVAILABLE BINS:
+{chr(10).join(available_bin_descriptions)}
+
+QUESTION: Can "{item_name}" go into any of the available bins? Answer with a number 0-100, where:
+- 0-59: NO, cannot go into any available bin
+- 60-100: YES, can go into an available bin (which one?)
+
+Answer format: [number]% - [yes/no] - [if yes, which bin?]"""
+        
+        try:
+            if image and self.supports_vision:
+                # Use vision if image available - downscale for speed
+                processed_image = self._to_pil_and_downscale(image) if image else None
+                response = self.model.generate_content(
+                    [prompt, processed_image],
+                    generation_config=self.generation_config_fast,
+                )
+            else:
+                # Text-only
+                response = self.model.generate_content(
+                    prompt,
+                    generation_config=self.generation_config_fast,
+                )
+            
+            response_text = response.text.strip()
+            
+            # Extract percentage from response
+            import re
+            percent_match = re.search(r'(\d+)%', response_text)
+            if percent_match:
+                confidence = int(percent_match.group(1))
+                
+                if confidence >= 60:
+                    # Item can go into an available bin
+                    # Find which available bin
+                    response_lower = response_text.lower()
+                    alternative_bin_type = None
+                    
+                    for bin_info in self.bin_layout:
+                        bin_type_check = bin_info.get('type', '').lower()
+                        if self.language == 'hungarian':
+                            if bin_type_check == 'recycling' and ('újrahasznosítás' in response_lower or 'recycle' in response_lower):
+                                alternative_bin_type = bin_type_check
+                                break
+                            elif bin_type_check == 'compost' and ('komposzt' in response_lower or 'compost' in response_lower):
+                                alternative_bin_type = bin_type_check
+                                break
+                            elif bin_type_check == 'landfill' and ('szemétlerakó' in response_lower or 'landfill' in response_lower):
+                                alternative_bin_type = bin_type_check
+                                break
+                        else:
+                            if bin_type_check in response_lower:
+                                alternative_bin_type = bin_type_check
+                                break
+                    
+                    # Default to first available bin if not found
+                    if not alternative_bin_type:
+                        alternative_bin_type = self.bin_layout[0].get('type', '').lower()
+                    
+                    bin_name = self._get_bin_name_for_type(alternative_bin_type)
+                    bin_color = self._get_bin_color_for_type(alternative_bin_type)
+                    bin_position = self._get_bin_position_for_type(alternative_bin_type)
+                    preferred_bin_name_display = preferred_bin_name
+                    
+                    if self.language == 'hungarian':
+                        explanation = f"Ez nem a {preferred_bin_name_display} kukába való, de mivel az nem elérhető, mehet a {bin_name} kukába."
+                    else:
+                        explanation = f"This doesn't belong in {preferred_bin_name_display}, but since it isn't available, it can go into {bin_name}."
+                    
+                    print(f"✅ Alternative classification: '{item_name}' → {alternative_bin_type.upper()} bin (was {preferred_bin_type.upper()}, {confidence}% confidence)")
+                    
+                    return {
+                        'item': item_name,
+                        'bin_type': alternative_bin_type,
+                        'bin_name': bin_name,
+                        'bin_color': bin_color,
+                        'bin_position': bin_position,
+                        'explanation': explanation,
+                        'alternative': True,
+                        'preferred_bin': preferred_bin_type
+                    }
+                else:
+                    # Confidence < 60%
+                    print(f"⚠️ Item '{item_name}' cannot go into any available bin ({confidence}% confidence)")
+                    return None
+            else:
+                # Couldn't parse percentage, assume no
+                print(f"⚠️ Could not parse confidence from response: {response_text[:100]}")
+                return None
+                
+        except Exception as e:
+            print(f"⚠️ Error checking alternative bin: {e}")
+            return None
+    
     def _get_bin_name_for_type(self, bin_type):
         """
         Get the bin name/label for a given bin type from the JSON layout.
-        Only returns bins that exist in the current bin_layout.
+        Returns a human-readable name like "recycling bin", "compost bin", "landfill bin".
+        Supports Hungarian translation when language is set to Hungarian.
         """
+        # Translate bin type to Hungarian if needed
+        if self.language == 'hungarian':
+            bin_translations = {
+                'recycling': 'újrahasznosítás',
+                'compost': 'komposzt',
+                'landfill': 'szemétlerakó'
+            }
+            bin_type_display = bin_translations.get(bin_type.lower(), bin_type)
+            bin_name = f"{bin_type_display} kuka"
+        else:
+            bin_name = f"{bin_type} bin"
+        
         if not self.bin_layout:
             # Fallback to bin_type if no layout
-            return f"{bin_type} bin"
+            return bin_name
         
         bin_type_lower = bin_type.lower()
         for bin_info in self.bin_layout:
             if bin_info.get('type', '').lower() == bin_type_lower:
-                # Use the bin type directly to create a proper name
-                # e.g., "recycling" -> "recycling bin", "compost" -> "compost bin", "landfill" -> "landfill bin"
-                bin_name = f"{bin_type} bin"
                 label = bin_info.get('label', '')
                 print(f"  📦 Bin name for {bin_type}: '{bin_name}' (from label: {label})")
                 return bin_name
         
         # Default fallback
-        return f"{bin_type} bin"
+        return bin_name
     
     def _get_bin_color_for_type(self, bin_type):
         """
@@ -852,6 +1361,51 @@ Respond fast in format: [item] goes into [bin_type] bin usually [color]"""
         # Default fallback
         print(f"  ⚠️ Bin color for {bin_type}: 'blue' (fallback - bin not found in layout)")
         return 'blue'
+    
+    def _get_bin_position_for_type(self, bin_type):
+        """
+        Get the bin position (left, middle, right) for a given bin type from the JSON layout.
+        Returns human-readable position like "on the left", "in the middle", "on the right".
+        """
+        if not self.bin_layout:
+            return None
+        
+        bin_type_lower = bin_type.lower()
+        for bin_info in self.bin_layout:
+            if bin_info.get('type', '').lower() == bin_type_lower:
+                pos = bin_info.get('pos', '').lower()
+                color = bin_info.get('color', '')
+                
+                # Convert position to readable format
+                if self.language == 'hungarian':
+                    if 'left' in pos or pos == 'leftmost':
+                        return 'bal oldalon'
+                    elif 'center' in pos or 'middle' in pos:
+                        return 'középen'
+                    elif 'right' in pos or pos == 'rightmost':
+                        return 'jobb oldalon'
+                    elif 'second' in pos:
+                        if 'left' in pos:
+                            return 'balról második'
+                        elif 'right' in pos:
+                            return 'jobbról második'
+                else:  # English
+                    if 'left' in pos or pos == 'leftmost':
+                        return 'on the left'
+                    elif 'center' in pos or 'middle' in pos:
+                        return 'in the middle'
+                    elif 'right' in pos or pos == 'rightmost':
+                        return 'on the right'
+                    elif 'second' in pos:
+                        if 'left' in pos:
+                            return 'second from left'
+                        elif 'right' in pos:
+                            return 'second from right'
+                
+                # Fallback: return position as-is if not recognized
+                return pos
+        
+        return None
     
     def _rule_based_classification(self, detected_items):
         """
@@ -1068,31 +1622,7 @@ Respond fast in format: [item] goes into [bin_type] bin usually [color]"""
         """
         question_lower = question.lower()
         
-        # Check if question is relevant to trash/recycling/waste disposal
-        relevant_keywords = [
-            'trash', 'recycle', 'recycling', 'compost', 'landfill', 'garbage', 'waste',
-            'bin', 'disposal', 'throw', 'away', 'why', 'how', 'what', 'where',
-            'plastic', 'paper', 'metal', 'fork', 'bottle', 'container', 'plate',
-            'repeat', 'again', 'say', 'explain', 'clarify'
-        ]
-        
-        # Check if question is clearly NOT relevant
-        irrelevant_keywords = [
-            'eiffel tower', 'tall', 'height', 'weather', 'time', 'date', 'capital',
-            'president', 'sports', 'movie', 'music', 'recipe', 'cooking'
-        ]
-        
-        # Check for irrelevant questions
-        if any(keyword in question_lower for keyword in irrelevant_keywords):
-            # Check if it's actually about trash (e.g., "how tall is the recycling bin")
-            if not any(relevant in question_lower for relevant in ['bin', 'trash', 'recycle', 'waste']):
-                return None  # Not relevant
-        
-        # Check if question is relevant
-        if not any(keyword in question_lower for keyword in relevant_keywords):
-            return None  # Not relevant
-        
-        # Handle "repeat" or "say again" requests
+        # Handle "repeat" or "say again" requests (quick check before LLM call)
         if any(phrase in question_lower for phrase in ['repeat', 'say again', 'what did you say', 'can you repeat']):
             if last_classifications:
                 # Reconstruct what was said
@@ -1100,7 +1630,11 @@ Respond fast in format: [item] goes into [bin_type] bin usually [color]"""
                 for item in last_classifications:
                     bin_name = self._get_bin_name_for_type(item.get('bin_type', 'bin'))
                     bin_color = item.get('bin_color', self._get_bin_color_for_type(item.get('bin_type', 'bin')))
-                    responses.append(f"{item.get('item', 'item')} goes into {bin_name} usually {bin_color}")
+                    bin_position = item.get('bin_position', None)
+                    if bin_position:
+                        responses.append(f"{item.get('item', 'item')} goes into {bin_color} {bin_name} {bin_position}")
+                    else:
+                        responses.append(f"{item.get('item', 'item')} goes into {bin_name} usually {bin_color}")
                 return ". ".join(responses)
             else:
                 return "I don't have anything to repeat. Please hold an item in front of the camera first."
@@ -1136,10 +1670,20 @@ AVAILABLE BINS:
         
         prompt = f"""{system_context}
 
-User Question: {question}{context}
+User Input: {question}{context}
 
-Instructions:
-- Answer ONLY questions related to waste disposal, recycling, composting, or the items you just classified
+CRITICAL: First, determine if this input was INTENDED for the bin system or is just chit chat/greeting.
+
+Examples of inputs NOT intended for the bin system (ignore these silently):
+- Greetings: "hello", "hi", "hey", "thanks", "thank you", "bye", "goodbye"
+- Small talk: "how are you", "what's up", "how's it going", "nice", "cool", "awesome"
+- General questions: "what's the weather", "tell me a joke", "what do you think", "do you like X"
+- Unrelated topics: questions about sports, movies, recipes, general knowledge not related to waste disposal
+
+If the input is NOT intended for the bin system, respond with ONLY: "NOT_RELEVANT"
+
+If the input IS intended for the bin system (questions about waste, recycling, bins, or items classified), then:
+- Answer questions related to waste disposal, recycling, composting, or the items you just classified
 - If the question is about a recent classification, explain WHY based on the item's condition, material, and contamination level
 - Be helpful, clear, and concise
 - If asked "why" about a classification, explain the reasoning based on the bin rules and item condition
@@ -1151,9 +1695,14 @@ Answer:"""
                 prompt,
                 generation_config=self.generation_config_fast,
             )
-            response_text = response.text
+            response_text = response.text.strip()
             # Store for logging
             self.last_raw_response = response_text
+            
+            # Check if Gemini determined the question is not relevant
+            if response_text.upper().startswith("NOT_RELEVANT") or response_text.upper() == "NOT_RELEVANT":
+                return None  # Not relevant - chit chat, ignore silently
+            
             return response_text
         except Exception as e:
             error_msg = f"I'm sorry, I encountered an error: {str(e)}"

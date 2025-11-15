@@ -18,6 +18,9 @@ app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
 
+# Store running process PID
+running_process_pid = None
+
 # Create uploads directory if it doesn't exist
 Path(app.config['UPLOAD_FOLDER']).mkdir(exist_ok=True)
 
@@ -260,6 +263,10 @@ def start_main_system():
             
             print(f"✅ Started main.py (PID: {process.pid}) with BIN_LOCATION={location}")
             
+            # Store the PID globally so we can stop it later
+            global running_process_pid
+            running_process_pid = process.pid
+            
             return jsonify({
                 'success': True,
                 'message': f'Main system started! Camera will open shortly.',
@@ -275,6 +282,69 @@ def start_main_system():
         
     except Exception as e:
         print(f"Error in start: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Error: {str(e)}'}), 500
+
+@app.route('/testing')
+def testing_page():
+    """Show testing in progress page"""
+    return render_template('testing.html')
+
+@app.route('/stop', methods=['POST'])
+def stop_main_system():
+    """Stop the main.py system"""
+    global running_process_pid
+    try:
+        if running_process_pid is None:
+            # Try to find the process
+            try:
+                result = subprocess.run(
+                    ['pgrep', '-f', 'python.*main.py'],
+                    capture_output=True,
+                    text=True
+                )
+                if result.returncode == 0:
+                    pids = result.stdout.strip().split('\n')
+                    if pids:
+                        running_process_pid = int(pids[0])
+            except Exception:
+                pass
+        
+        if running_process_pid:
+            try:
+                # Try graceful termination first
+                os.kill(running_process_pid, 15)  # SIGTERM
+                time.sleep(1)
+                # Check if still running, force kill if needed
+                try:
+                    os.kill(running_process_pid, 0)  # Check if process exists
+                    os.kill(running_process_pid, 9)  # SIGKILL
+                except ProcessLookupError:
+                    pass  # Process already terminated
+                
+                print(f"✅ Stopped main.py (PID: {running_process_pid})")
+                running_process_pid = None
+                return jsonify({
+                    'success': True,
+                    'message': 'Main system stopped successfully.'
+                })
+            except ProcessLookupError:
+                running_process_pid = None
+                return jsonify({
+                    'success': True,
+                    'message': 'Main system was not running.'
+                })
+            except Exception as e:
+                print(f"Error stopping main.py: {e}")
+                return jsonify({'error': f'Error stopping system: {str(e)}'}), 500
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'No running process found.'
+            })
+    except Exception as e:
+        print(f"Error in stop: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({'error': f'Error: {str(e)}'}), 500
@@ -296,6 +366,31 @@ if __name__ == '__main__':
     print("Starting bin layout web app...")
     print("Available locations:", list(LOCATIONS.values()))
     port = int(os.environ.get('PORT', find_free_port(8080)))
-    print(f"Server starting on http://localhost:{port}")
+    
+    # Get local IP address for network access
+    def get_local_ip():
+        """Get the local IP address of this machine"""
+        try:
+            # Connect to a remote address to determine local IP
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))  # Google DNS
+            ip = s.getsockname()[0]
+            s.close()
+            return ip
+        except Exception:
+            return "localhost"
+    
+    local_ip = get_local_ip()
+    print(f"\n{'='*60}")
+    print(f"🌐 Web App Accessible On:")
+    print(f"   Local:  http://localhost:{port}")
+    print(f"   Network: http://{local_ip}:{port}")
+    print(f"{'='*60}")
+    print(f"\n📱 To access from iPad:")
+    print(f"   1. Make sure iPad is on the same Wi-Fi network")
+    print(f"   2. Open Safari on iPad")
+    print(f"   3. Go to: http://{local_ip}:{port}")
+    print(f"{'='*60}\n")
+    
     app.run(debug=True, host='0.0.0.0', port=port)
 
