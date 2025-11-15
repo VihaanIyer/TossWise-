@@ -267,6 +267,176 @@ CRITICAL: Look at the IMAGE to determine if items are CLEAN or CONTAMINATED. Ana
                 'item': item_name
             }
     
+    def detect_bags_in_image(self, image):
+        """
+        Detect trash bags in the image using Gemini Vision
+        
+        Args:
+            image: PIL Image or numpy array
+            
+        Returns:
+            List of detected bags with their positions/descriptions
+        """
+        # Convert numpy array to PIL Image if needed
+        if not isinstance(image, Image.Image):
+            if hasattr(image, 'shape'):  # numpy array
+                import numpy as np
+                if len(image.shape) == 3 and image.shape[2] == 3:
+                    image_rgb = image[:, :, ::-1]  # BGR to RGB
+                    image = Image.fromarray(image_rgb)
+                else:
+                    image = Image.fromarray(image)
+        
+        prompt = """EXAMINE THIS IMAGE. Look for TRASH BAGS or GARBAGE BAGS that are ready to be disposed of.
+
+CRITICAL: ONLY identify bags that are:
+- Trash bags, garbage bags, or bags filled with waste
+- Bags that are clearly meant for disposal (not personal bags like backpacks, purses, shopping bags being used)
+- Bags that appear to contain trash/waste
+
+IGNORE:
+- Personal bags (backpacks, purses, handbags, shopping bags being carried)
+- Empty bags
+- Bags that are clearly not trash
+
+If you see trash bags, count how many distinct bags you see and describe their position (left, center, right, etc.).
+
+Respond in this format:
+- If bags found: "BAG_1: [position/description], BAG_2: [position/description], ..."
+- If no bags found: "NO_BAGS"
+
+Examples:
+- "BAG_1: left side, BAG_2: right side"
+- "BAG_1: center"
+- "NO_BAGS"
+
+Respond:"""
+        
+        try:
+            if self.supports_vision:
+                response = self.model.generate_content([prompt, image])
+                response_text = response.text.strip()
+                self.last_raw_response = response_text
+                
+                # Parse response
+                if "NO_BAGS" in response_text.upper() or "no bag" in response_text.lower():
+                    return []
+                
+                # Extract bag information
+                bags = []
+                bag_pattern = r'BAG_(\d+):\s*(.+)'
+                matches = re.findall(bag_pattern, response_text, re.IGNORECASE)
+                
+                for match in matches:
+                    bag_num = int(match[0])
+                    description = match[1].strip()
+                    bags.append({
+                        'number': bag_num,
+                        'description': description,
+                        'position': description
+                    })
+                
+                return bags
+            else:
+                return []
+        except Exception as e:
+            print(f"Error detecting bags: {e}")
+            return []
+    
+    def classify_bag_contents(self, bag_description):
+        """
+        Classify which bin a bag should go into based on user's description of contents
+        
+        Args:
+            bag_description: User's description of what's mostly in the bag
+            
+        Returns:
+            Dictionary with bin type, bin_name, bin_color, and explanation
+        """
+        # Build bin descriptions from JSON
+        bin_descriptions = []
+        if self.bin_layout:
+            for bin_info in self.bin_layout:
+                bin_type = bin_info.get('type', '').upper()
+                color = bin_info.get('color', '')
+                sign = bin_info.get('sign', '')
+                bin_desc = f"- {bin_type} ({color}): {sign}"
+                bin_descriptions.append(bin_desc)
+        else:
+            bin_descriptions = [
+                "- RECYCLING (blue): Clean recyclable materials",
+                "- COMPOST (green): Organic food waste",
+                "- LANDFILL (black/grey): Contaminated or non-recyclable items"
+            ]
+        
+        prompt = f"""A user has a bag of trash and described what's mostly in it as: "{bag_description}"
+
+Based on this description, determine which bin this bag should go into.
+
+AVAILABLE BINS:
+{chr(10).join(bin_descriptions)}
+
+Consider:
+- What is the PRIMARY/MOST COMMON material in the bag?
+- If it's mixed, what is the majority?
+- If it contains food waste, it likely goes to compost
+- If it contains recyclables (paper, plastic, metal), it likely goes to recycling
+- If it contains contaminated items or non-recyclables, it likely goes to landfill
+
+Respond in this exact format:
+[bin_type] bin usually [color]
+
+Examples:
+- "recycle bin usually blue" (if mostly recyclables)
+- "compost bin usually green" (if mostly food waste)
+- "landfill bin usually black or grey" (if mostly non-recyclables or contaminated)
+
+Your answer:"""
+        
+        try:
+            response = self.model.generate_content(prompt)
+            response_text = response.text.strip()
+            self.last_raw_response = response_text
+            
+            # Parse response
+            response_lower = response_text.lower()
+            
+            # Extract bin type
+            bin_type = "landfill"  # default
+            if "recycle" in response_lower:
+                bin_type = "recycling"
+            elif "compost" in response_lower:
+                bin_type = "compost"
+            elif "landfill" in response_lower or "trash" in response_lower:
+                bin_type = "landfill"
+            
+            # Extract color
+            bin_color = self._get_bin_color_for_type(bin_type)
+            if "blue" in response_lower:
+                bin_color = "blue"
+            elif "green" in response_lower:
+                bin_color = "green"
+            elif "black" in response_lower or "grey" in response_lower or "gray" in response_lower:
+                bin_color = "black or grey"
+            
+            bin_name = self._get_bin_name_for_type(bin_type)
+            
+            return {
+                'bin_type': bin_type,
+                'bin_name': bin_name,
+                'bin_color': bin_color,
+                'explanation': f"Based on the contents ({bag_description}), this bag goes into the {bin_color} {bin_name}."
+            }
+        except Exception as e:
+            print(f"Error classifying bag contents: {e}")
+            bin_name = self._get_bin_name_for_type('landfill')
+            return {
+                'bin_type': 'landfill',
+                'bin_name': bin_name,
+                'bin_color': self._get_bin_color_for_type('landfill'),
+                'explanation': f"Unable to classify. Please check local recycling guidelines."
+            }
+    
     def classify_item_from_image(self, image, detected_items=None):
         """
         Classify items directly from image using vision

@@ -214,6 +214,9 @@ class SmartTrashBin:
         self.person_detected_time = None  # Track when person was detected for timing
         self.last_spoken_text = []  # Store last spoken items for "repeat" functionality
         self.listening_for_questions = False  # Track if we're listening for questions
+        self.processing_detection = False  # Track if we're currently processing a detection
+        self.detected_bags = []  # Store detected bags
+        self.current_bag_index = 0  # Track which bag we're asking about
         
         Logger.log_system_event("System fully initialized and ready!")
         print("\n" + "="*80)
@@ -278,6 +281,104 @@ class SmartTrashBin:
         self.listening_for_questions = False
         Logger.log_system_event("Question listening period ended")
     
+    def _handle_bag_detection(self):
+        """
+        Handle detected trash bags by asking user about contents
+        """
+        if not self.voice_input:
+            Logger.log_system_event("Voice input not available. Cannot ask about bag contents.")
+            return
+        
+        num_bags = len(self.detected_bags)
+        
+        if num_bags == 1:
+            # Single bag
+            bag = self.detected_bags[0]
+            question = f"I see a trash bag. What is mostly in this bag?"
+            Logger.log_tts_output(question)
+            self.tts.speak(question)
+            
+            # Listen for answer (10 seconds)
+            answer = self.voice_input.listen_once(timeout=10)
+            
+            if answer:
+                Logger.log_system_event(f"User said bag contains: {answer}")
+                # Classify based on answer
+                classification = self.classifier.classify_bag_contents(answer)
+                
+                bin_name = classification.get('bin_name', classification.get('bin_type', 'bin'))
+                bin_color = classification.get('bin_color', 'blue')
+                
+                response = f"This bag goes into the {bin_name} usually {bin_color}."
+                Logger.log_tts_output(response)
+                self.tts.speak(response)
+                
+                # Store for display
+                self.current_classifications = [{
+                    'item': f"Bag ({answer})",
+                    'bin_type': classification['bin_type'],
+                    'bin_name': bin_name,
+                    'bin_color': bin_color,
+                    'explanation': classification['explanation']
+                }]
+            else:
+                Logger.log_system_event("No answer received for bag contents.")
+                self.tts.speak("I couldn't hear your answer. Please try again.")
+        else:
+            # Multiple bags
+            Logger.log_tts_output(f"I see {num_bags} trash bags. Let me ask about each one.")
+            self.tts.speak(f"I see {num_bags} trash bags. Let me ask about each one.")
+            time.sleep(0.5)
+            
+            bag_classifications = []
+            
+            for i, bag in enumerate(self.detected_bags, 1):
+                question = f"What is mostly in bag {i}?"
+                Logger.log_tts_output(question)
+                self.tts.speak(question)
+                
+                # Listen for answer (10 seconds)
+                answer = self.voice_input.listen_once(timeout=10)
+                
+                if answer:
+                    Logger.log_system_event(f"Bag {i} contains: {answer}")
+                    # Classify based on answer
+                    classification = self.classifier.classify_bag_contents(answer)
+                    
+                    bin_name = classification.get('bin_name', classification.get('bin_type', 'bin'))
+                    bin_color = classification.get('bin_color', 'blue')
+                    
+                    response = f"Bag {i} goes into the {bin_name} usually {bin_color}."
+                    Logger.log_tts_output(response)
+                    self.tts.speak(response)
+                    time.sleep(0.3)
+                    
+                    bag_classifications.append({
+                        'item': f"Bag {i} ({answer})",
+                        'bin_type': classification['bin_type'],
+                        'bin_name': bin_name,
+                        'bin_color': bin_color,
+                        'explanation': classification['explanation']
+                    })
+                else:
+                    Logger.log_system_event(f"No answer received for bag {i}.")
+                    self.tts.speak(f"I couldn't hear your answer for bag {i}.")
+                    time.sleep(0.3)
+            
+            # Store all bag classifications
+            self.current_classifications = bag_classifications
+            
+            # Summary
+            if bag_classifications:
+                summary = "That's all the bags."
+                Logger.log_tts_output(summary)
+                self.tts.speak(summary)
+        
+        # Add closing message
+        closing_msg = "If you have any questions, let me know. If you don't, have a great day."
+        Logger.log_tts_output(closing_msg)
+        self.tts.speak(closing_msg)
+    
     def _handle_question(self, question):
         """
         Handle a user question
@@ -306,26 +407,55 @@ class SmartTrashBin:
             if self.listening_for_questions:
                 time.sleep(0.5)  # Brief pause before continuing to listen
     
+    def _process_detection_async(self, frame):
+        """
+        Process detection in background thread to prevent UI freeze
+        
+        Args:
+            frame: Camera frame (numpy array in RGB format)
+        """
+        try:
+            self.process_detection([], frame=frame)
+        except Exception as e:
+            Logger.log_error(str(e), "Background detection processing")
+        finally:
+            self.processing_detection = False
+    
     def process_detection(self, food_items, frame=None):
         """
-        Process detected food items and provide classification using vision
-        Automatically classifies ALL items in the image
+        Process detected items and provide classification using vision
+        First checks for trash bags, then falls back to individual items
         
         Args:
             food_items: List of detected food items
             frame: Current camera frame (numpy array)
         """
-        # Now using Gemini Vision to identify trash - no YOLOv8 trash detection
-        # food_items parameter is kept for compatibility but not used
         if frame is None:
             Logger.log_error("No frame provided for analysis", "process_detection")
             return
         
-        Logger.log_system_event("Analyzing image for trash items using Gemini Vision...")
+        # First, check for trash bags
+        Logger.log_system_event("Checking for trash bags in image...")
+        try:
+            bags = self.classifier.detect_bags_in_image(frame)
+            Logger.log_system_event(f"Bag detection result: {len(bags)} bags found")
+        except Exception as e:
+            Logger.log_error(str(e), "Bag detection")
+            bags = []
+        
+        # If bags detected, handle bag workflow
+        if bags and len(bags) > 0:
+            self.detected_bags = bags
+            self.current_bag_index = 0
+            Logger.log_system_event(f"Found {len(bags)} trash bag(s). Starting bag content questions...")
+            self._handle_bag_detection()
+            return
+        
+        # No bags found, proceed with individual item detection
+        Logger.log_system_event("No bags detected. Analyzing image for individual trash items...")
         Logger.log_llm_request("Analyzing image for all visible trash/waste items", image_sent=True)
         
         # Use Gemini Vision to identify trash in the image
-        # Pass None for detected_items since we're not using YOLOv8 detections
         try:
             classifications = self.classifier.classify_item_from_image(frame, detected_items=None)
             raw_response = getattr(self.classifier, 'last_raw_response', 'Response received')
@@ -383,7 +513,7 @@ class SmartTrashBin:
             Logger.log_tts_output(response)
             self.tts.speak(response)
             # Add closing message
-            closing_msg = "If you have any questions, let me know."
+            closing_msg = "If you have any questions, let me know. If you don't, have a great day."
             self.last_spoken_text.append(closing_msg)
             Logger.log_tts_output(closing_msg)
             self.tts.speak(closing_msg)
@@ -397,14 +527,14 @@ class SmartTrashBin:
                 self.tts.speak(response)
                 time.sleep(0.3)  # Shorter pause for faster response
             # Add closing message after all items
-            closing_msg = "If you have any questions, let me know."
+            closing_msg = "If you have any questions, let me know. If you don't, have a great day."
             self.last_spoken_text.append(closing_msg)
             Logger.log_tts_output(closing_msg)
             self.tts.speak(closing_msg)
         
-        # Listen for questions for 10 seconds after speaking
+        # Listen for questions for 5 seconds after speaking
         if self.voice_input:
-            self._listen_for_questions(10)
+            self._listen_for_questions(5)
     
     
     def run(self):
@@ -481,16 +611,27 @@ class SmartTrashBin:
                                 # Convert BGR to RGB for PIL
                                 snapshot_rgb = cv2.cvtColor(best_frame, cv2.COLOR_BGR2RGB)
                                 
-                                # Analyze best image for trash using Gemini Vision
-                                Logger.log_system_event("Analyzing best image for trash analysis...")
-                                self.process_detection([], frame=snapshot_rgb)
-                                last_classification_time = current_time
+                                # Analyze best image for trash using Gemini Vision (in background thread)
+                                if not self.processing_detection:
+                                    Logger.log_system_event("Starting background analysis of image...")
+                                    self.processing_detection = True
+                                    # Run analysis in background thread to prevent UI freeze
+                                    analysis_thread = threading.Thread(
+                                        target=self._process_detection_async,
+                                        args=(snapshot_rgb,),
+                                        daemon=True
+                                    )
+                                    analysis_thread.start()
+                                    last_classification_time = current_time
                     
                     person_detected_last_frame = person_detected
                     
                     # Draw person detection indicator on frame (silent - no speech)
                     if person_detected:
-                        cv2.putText(frame, "PERSON DETECTED - Checking for trash...", 
+                        status_text = "PERSON DETECTED - Checking for trash..."
+                        if self.processing_detection:
+                            status_text = "PERSON DETECTED - Analyzing image..."
+                        cv2.putText(frame, status_text, 
                                   (10, 30), 
                                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
                 
