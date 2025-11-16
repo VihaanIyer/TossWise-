@@ -2,16 +2,16 @@
   "bins": [
     {
       "id": 0,
-      "label": "blue_recycle",
+      "label": "blue_bin",
       "type": "recycling",
       "color": "blue",
-      "sign": "recycle: all paper, metal, glass, plastic bottles",
-      "pos": "center",
+      "sign": "recycle",
+      "pos": "leftmost",
       "conf": 1
     }
   ],
   "location": "atlanta_ga_usa",
   "location_name": "Atlanta, GA, USA",
-  "scene": "office setting with a blue recycling bin",
-  "raw_response": "{\n  \"bins\": [\n    {\n      \"id\": 0,\n      \"label\": \"blue_recycle\",\n      \"type\": \"recycling\",\n      \"pos\": \"center\",\n      \"color\": \"blue\",\n      \"sign\": \"recycle: all paper, metal, glass, plastic bottles\",\n      \"conf\": 0.95\n    }\n  ],\n  \"scene\": \"office setting with a blue recycling bin\"\n}"
+  "scene": "Two bins behind a chair, blue and green.",
+  "raw_response": "{\n  \"bins\": [\n    {\n      \"id\": 0,\n      \"label\": \"blue_bin\",\n      \"type\": \"recycling\",\n      \"pos\": \"leftmost\",\n      \"color\": \"blue\",\n      \"sign\": \"recycle\",\n      \"conf\": 0.8\n    },\n    {\n      \"id\": 1,\n      \"label\": \"green_bin\",\n      \"type\": \"compost\",\n      \"pos\": \"second_from_left\",\n      \"color\": \"green\",\n      \"sign\": \"compost\",\n      \"conf\": 0.8\n    }\n  ],\n  \"scene\": \"Two bins behind a chair, blue and green.\"\n}"
 }

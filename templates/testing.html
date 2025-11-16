@@ -215,6 +215,61 @@
             overflow: hidden;
         }
         
+        /* Trash falling animation container */
+        .trash-animation-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1000;
+            overflow: hidden;
+        }
+        
+        .falling-trash {
+            position: absolute;
+            font-size: 24px;
+            animation: fallIntoBin 1.2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+            pointer-events: none;
+            z-index: 1001;
+        }
+        
+        @keyframes fallIntoBin {
+            0% {
+                opacity: 1;
+                transform: translateY(0) translateX(0) rotate(0deg) scale(1);
+            }
+            50% {
+                opacity: 1;
+                transform: translateY(var(--fall-distance)) translateX(var(--offset-x)) rotate(180deg) scale(1.1);
+            }
+            100% {
+                opacity: 0;
+                transform: translateY(var(--fall-distance)) translateX(var(--offset-x)) rotate(360deg) scale(0.3);
+            }
+        }
+        
+        /* Bin card animation when item is added */
+        .bin-card.new-item {
+            animation: binPulse 0.6s ease-out;
+        }
+        
+        @keyframes binPulse {
+            0% {
+                transform: scale(1);
+                box-shadow: 0 2px 8px rgba(41, 50, 40, 0.1);
+            }
+            50% {
+                transform: scale(1.05);
+                box-shadow: 0 4px 16px rgba(41, 50, 40, 0.3);
+            }
+            100% {
+                transform: scale(1);
+                box-shadow: 0 2px 8px rgba(41, 50, 40, 0.1);
+            }
+        }
+        
         .bin-fill {
             position: absolute;
             bottom: 0;
@@ -228,6 +283,22 @@
         .bin-fill.recycling { color: #2563eb; }
         .bin-fill.compost { color: #16a34a; }
         .bin-fill.landfill { color: #374151; }
+        
+        .bin-fill.new-item {
+            animation: fillBounce 0.8s ease-out;
+        }
+        
+        @keyframes fillBounce {
+            0% {
+                transform: scaleY(0.8);
+            }
+            50% {
+                transform: scaleY(1.05);
+            }
+            100% {
+                transform: scaleY(1);
+            }
+        }
         
         .bin-percentage {
             color: rgb(2, 3, 3);
@@ -338,6 +409,9 @@
         </div>
     </div>
     
+    <!-- Trash animation container -->
+    <div class="trash-animation-container" id="trashAnimationContainer"></div>
+    
     <script>
         // School names mapping
         const schoolNames = {
@@ -386,6 +460,79 @@
         
         // Insights polling
         let insightsInterval = null;
+        let previousBinCounts = {}; // Track previous bin item counts
+        
+        // Trash emojis by bin type
+        const trashEmojis = {
+            'recycling': ['📄', '📰', '📦', '🥤', '🍶', '📋'],
+            'compost': ['🍌', '🍎', '🥬', '🌿', '☕', '🥑'],
+            'landfill': ['🍕', '🍔', '🥤', '📱', '💡', '🗑️']
+        };
+        
+        function getRandomTrashEmoji(binType) {
+            const emojis = trashEmojis[binType] || ['🗑️'];
+            return emojis[Math.floor(Math.random() * emojis.length)];
+        }
+        
+        function createFallingTrashAnimation(binCard, binType) {
+            const container = document.getElementById('trashAnimationContainer');
+            if (!container) {
+                console.error('Animation container not found');
+                return;
+            }
+            
+            // Get bin card position - wait a bit for DOM to settle
+            setTimeout(() => {
+                const binVisual = binCard.querySelector('.bin-visual');
+                if (!binVisual) {
+                    console.error('Bin visual element not found');
+                    return;
+                }
+                
+                const binVisualRect = binVisual.getBoundingClientRect();
+                if (binVisualRect.width === 0 || binVisualRect.height === 0) {
+                    console.error('Bin visual has zero dimensions');
+                    return;
+                }
+                
+                const targetX = binVisualRect.left + binVisualRect.width / 2;
+                const targetY = binVisualRect.top + binVisualRect.height;
+                
+                // Create 2-3 trash items falling
+                const trashCount = 2 + Math.floor(Math.random() * 2);
+                const startY = binVisualRect.top - 150; // Start 150px above the bin
+                
+                console.log(`Creating ${trashCount} falling trash items for ${binType} bin at (${targetX}, ${targetY})`);
+                
+                for (let i = 0; i < trashCount; i++) {
+                    const trash = document.createElement('div');
+                    trash.className = 'falling-trash';
+                    trash.textContent = getRandomTrashEmoji(binType);
+                    
+                    // Randomize starting position slightly above the bin
+                    const startX = targetX + (Math.random() - 0.5) * 80;
+                    const offsetX = (Math.random() - 0.5) * 30;
+                    const fallDistance = targetY - startY; // Calculate fall distance in pixels
+                    
+                    trash.style.left = startX + 'px';
+                    trash.style.top = startY + 'px';
+                    trash.style.setProperty('--fall-distance', fallDistance + 'px');
+                    trash.style.setProperty('--offset-x', offsetX + 'px');
+                    
+                    // Add slight delay for staggered effect
+                    trash.style.animationDelay = (i * 0.1) + 's';
+                    
+                    container.appendChild(trash);
+                    
+                    // Remove after animation
+                    setTimeout(() => {
+                        if (trash.parentNode) {
+                            trash.parentNode.removeChild(trash);
+                        }
+                    }, 1200 + (i * 100));
+                }
+            }, 50);
+        }
         
         function updateInsights() {
             try {
@@ -411,6 +558,10 @@
                             return;
                         }
                         
+                        // Debug logging
+                        console.log('Insights data received:', data);
+                        console.log('Bins count:', data.bins ? data.bins.length : 0);
+                        
                         // Update total items
                         if (totalItemsEl) {
                             totalItemsEl.textContent = data.total_items || 0;
@@ -421,9 +572,16 @@
                             binsGrid.innerHTML = '';
                             
                             if (data.bins && data.bins.length > 0) {
+                                console.log('Processing bins:', data.bins);
                                 data.bins.forEach(bin => {
                                     const binCard = document.createElement('div');
                                     binCard.className = 'bin-card';
+                                    
+                                    // Check if this bin has a new item
+                                    const binKey = bin.type || bin.label;
+                                    const previousCount = previousBinCounts[binKey] || 0;
+                                    const currentCount = bin.item_count || 0;
+                                    const hasNewItem = currentCount > previousCount;
                                     
                                     // Determine contamination status
                                     let contaminationClass = 'clean';
@@ -436,10 +594,12 @@
                                         contaminationText = `${bin.contamination_percentage}% contaminated`;
                                     }
                                     
+                                    const fillClass = hasNewItem ? `${bin.type} new-item` : bin.type;
+                                    
                                     binCard.innerHTML = `
                                         <div class="bin-label">${bin.label || bin.type}</div>
                                         <div class="bin-visual">
-                                            <div class="bin-fill ${bin.type}" style="height: ${bin.fill_percentage}%"></div>
+                                            <div class="bin-fill ${fillClass}" style="height: ${bin.fill_percentage}%"></div>
                                         </div>
                                         <div class="bin-percentage">${bin.fill_percentage}%</div>
                                         <div class="bin-count">${bin.item_count} items</div>
@@ -449,6 +609,28 @@
                                     `;
                                     
                                     binsGrid.appendChild(binCard);
+                                    
+                                    // Trigger animation if new item detected (after DOM is ready)
+                                    if (hasNewItem) {
+                                        console.log(`New item detected in ${binKey}: ${previousCount} -> ${currentCount}`);
+                                        // Use requestAnimationFrame to ensure DOM is ready
+                                        requestAnimationFrame(() => {
+                                            setTimeout(() => {
+                                                try {
+                                                    createFallingTrashAnimation(binCard, bin.type);
+                                                    binCard.classList.add('new-item');
+                                                    setTimeout(() => {
+                                                        binCard.classList.remove('new-item');
+                                                    }, 600);
+                                                } catch (e) {
+                                                    console.error('Animation error:', e);
+                                                }
+                                            }, 100);
+                                        });
+                                    }
+                                    
+                                    // Update previous count
+                                    previousBinCounts[binKey] = currentCount;
                                 });
                             } else {
                                 binsGrid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: rgb(107, 125, 141); padding: 20px;">No bins configured yet</div>';
