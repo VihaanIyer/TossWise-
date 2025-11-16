@@ -168,13 +168,9 @@ Return valid JSON only.
         
         image = self._ensure_pil_image(self.BIN_LAYOUT_IMAGE_PATH)
         
-        # Optional: downscale the layout image so the one-time call is lighter.
-        # This should NOT be called per frame at runtime; it's a calibration step.
-        max_width = 1024
-        if hasattr(image, "width") and image.width > max_width:
-            new_height = int(image.height * max_width / image.width)
-            image = image.resize((max_width, new_height))
-            print(f"Resized layout image to {max_width}x{new_height} for analysis.")
+        # Use full resolution image for maximum accuracy
+        # No resizing - send full image to Gemini Vision API for best text/details reading
+        print(f"Using full resolution image: {image.width}x{image.height} for analysis.")
         
         return self._analyze_image(image)
 

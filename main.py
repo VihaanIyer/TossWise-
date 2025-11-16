@@ -1190,9 +1190,9 @@ class SmartTrashBin:
                 self.tts.speak_thread.join()
             interrupted = False  # No interruption during initial classification
         
-        # Listen for questions for 2 seconds after closing message (only if not interrupted)
+        # Listen for questions for 4 seconds after speaking (if not interrupted)
         if self.voice_input and not interrupted:
-            self._listen_for_questions(2)
+            self._listen_for_questions(4)
     
     
     def run(self):
@@ -1232,6 +1232,7 @@ class SmartTrashBin:
             while True:
                 ret, frame = cap.read()
                 if not ret:
+                    Logger.log_error("Camera stopped providing frames. Shutting down...", "Camera read")
                     break
                 
                 # Check for bin layout reload signal (check every 30 frames to avoid overhead)
@@ -1318,16 +1319,28 @@ class SmartTrashBin:
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
                 
                 # Display the frame
-                cv2.imshow('Smart Trash Bin - Detection Running', frame)
+                try:
+                    cv2.imshow('Smart Trash Bin - Detection Running', frame)
+                except Exception as e:
+                    Logger.log_error(f"Error displaying frame: {e}", "cv2.imshow")
+                    # Continue anyway - don't crash on display errors
                 
                 # Handle keyboard input ONCE per frame (fix double waitKey)
-                key = cv2.waitKey(1) & 0xFF
-                if key == ord('q'):
-                    Logger.log_system_event("Quit key pressed. Shutting down...")
-                    break
+                try:
+                    key = cv2.waitKey(1) & 0xFF
+                    if key == ord('q'):
+                        Logger.log_system_event("Quit key pressed. Shutting down...")
+                        break
+                except Exception as e:
+                    Logger.log_error(f"Error reading keyboard input: {e}", "cv2.waitKey")
+                    # Continue anyway - don't crash on input errors
         
         except KeyboardInterrupt:
-            print("\nShutting down...")
+            Logger.log_system_event("Keyboard interrupt (Ctrl+C) detected. Shutting down...")
+        except Exception as e:
+            Logger.log_error(f"Unexpected error in main loop: {e}", "Main loop")
+            import traceback
+            Logger.log_error(traceback.format_exc(), "Main loop traceback")
         
         finally:
             # Cleanup

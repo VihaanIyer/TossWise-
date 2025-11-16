@@ -907,27 +907,38 @@ Hint: {items_text}"""
                 context = "\nRecent classifications:\n" + "\n".join(lines)
 
         if self.language == "hungarian":
-            prompt = f"""Válaszolj a kérdésre, HA hulladék/kuka témához kapcsolódik.
+            prompt = f"""Te egy okos kukarendszer vagy. Válaszolj CSAK akkor, ha a felhasználó VALÓDI KÉRDÉST tesz fel a hulladék/kuka témában.
+
+FONTOS:
+- Ha a felhasználó csak beszélget (pl. "szia", "köszönöm", "rendben"), NE válaszolj - írd: NOT_RELEVANT
+- Ha a felhasználó VALÓDI KÉRDÉST tesz fel (pl. "miért", "hogyan", "melyik"), akkor válaszolj
+- Mindig TELJES MONDATOKBAN válaszolj, ne csak szavakkal vagy rövid válaszokkal
 
 KUKÁK:
 {bins_desc}
 
-Kérdés: "{q}"
+Felhasználó mondása: "{q}"
 {context}
 
-Ha NEM kapcsolódik: NOT_RELEVANT
-Ha kapcsolódik: rövid magyarázat magyarul."""
+Ha NEM kapcsolódik vagy csak beszélgetés: NOT_RELEVANT
+Ha VALÓDI KÉRDÉS és kapcsolódik: Teljes mondatban válaszolj magyarul, magyarázattal."""
         else:
-            prompt = f"""Answer ONLY if about waste/bins/recycling/compost.
+            prompt = f"""You are a smart trash bin system. Answer ONLY if the user is asking a REAL QUESTION about waste/bins/recycling/compost.
+
+IMPORTANT:
+- If the user is just chatting/talking (e.g., "hello", "thanks", "okay", "got it", or anything indicating it is not for you), DO NOT answer - respond: NOT_RELEVANT
+- If the user is asking a REAL QUESTION (e.g., "why", "how", "which", "what"), then answer
+- Always respond with COMPLETE SENTENCES, not just words or short phrases
+- Distinguish between questions (ending with "?") and casual statements
 
 BINS:
 {bins_desc}
 
-Q: "{q}"
+User said: "{q}"
 {context}
 
-If NOT relevant: NOT_RELEVANT
-If relevant: short clear answer."""
+If NOT relevant or just casual talk: NOT_RELEVANT
+If REAL QUESTION and relevant: Answer with a complete sentence, including explanation."""
         try:
             response = self.model.generate_content(
                 prompt,

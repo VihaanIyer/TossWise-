@@ -598,6 +598,30 @@
             transform: none;
         }
         
+        .btn-add-bin {
+            background: rgb(107, 125, 141);
+            color: white;
+            border: none;
+            padding: 14px 20px;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 16px;
+            width: 100%;
+            transition: all 0.2s;
+            touch-action: manipulation;
+        }
+        
+        .btn-add-bin:hover {
+            background: rgb(41, 50, 40);
+        }
+        
+        .btn-add-bin:active {
+            transform: scale(0.98);
+            background: rgb(2, 3, 3);
+        }
+        
         /* Success/Error Messages */
         .message-box {
             padding: 20px;
@@ -901,13 +925,16 @@
             html += `<p style="margin-bottom: 16px; color: rgb(107, 125, 141); font-size: 14px;"><strong>Bins Found:</strong> ${currentBins.length}</p>`;
             html += `<p style="margin-bottom: 20px; color: rgb(107, 125, 141); font-size: 13px; line-height: 1.5;">Edit the bins below, remove any you don't have, then tap "Set Up" to activate.</p>`;
             
+            html += '<div id="editableBins" style="margin-top: 20px;">';
             if (currentBins.length > 0) {
-                html += '<div id="editableBins" style="margin-top: 20px;">';
                 currentBins.forEach((bin, index) => {
                     html += createEditableBinHtml(bin, index);
                 });
-                html += '</div>';
+            } else {
+                html += '<p style="color: rgb(107, 125, 141); text-align: center; padding: 20px; font-size: 14px;">No bins detected. Add a bin manually below.</p>';
             }
+            html += '</div>';
+            html += '<button type="button" id="addBinBtn" class="btn-add-bin" onclick="addNewBin()">➕ Add New Bin</button>';
             
             html += `<button type="button" id="setupBtn" class="btn-setup">✅ Set Up Bins</button>`;
             html += `<div id="setupResult" style="margin-top: 16px;"></div>`;
@@ -973,19 +1000,67 @@
             }
         }
         
+        function addNewBin() {
+            // Create a new empty bin with default values
+            const newBin = {
+                id: currentBins.length,
+                label: `bin_${currentBins.length + 1}`,
+                type: 'unknown',
+                color: '',
+                sign: '',
+                pos: 'center',
+                conf: 1.0
+            };
+            currentBins.push(newBin);
+            refreshBinDisplay();
+            
+            // Scroll to the newly added bin
+            setTimeout(() => {
+                const editableBins = document.getElementById('editableBins');
+                if (editableBins) {
+                    const lastBin = editableBins.lastElementChild;
+                    if (lastBin) {
+                        lastBin.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                        // Focus on the label input
+                        const labelInput = lastBin.querySelector('.bin-label');
+                        if (labelInput) {
+                            labelInput.focus();
+                            labelInput.select();
+                        }
+                    }
+                }
+            }, 100);
+        }
+        
         function refreshBinDisplay() {
+            const editableBins = document.getElementById('editableBins');
+            const addBinBtn = document.getElementById('addBinBtn');
+            
+            if (!editableBins) {
+                console.error('editableBins container not found');
+                return;
+            }
+            
             let html = '';
             if (currentBins.length > 0) {
                 currentBins.forEach((bin, index) => {
                     html += createEditableBinHtml(bin, index);
                 });
             } else {
-                html = '<p style="color: #f44336; text-align: center; padding: 20px;">No bins remaining. Add at least one bin to continue.</p>';
+                html = '<p style="color: rgb(107, 125, 141); text-align: center; padding: 20px; font-size: 14px;">No bins remaining. Add at least one bin to continue.</p>';
             }
             
-            const editableBins = document.getElementById('editableBins');
-            if (editableBins) {
-                editableBins.innerHTML = html;
+            editableBins.innerHTML = html;
+            
+            // Ensure Add Bin button exists
+            if (!addBinBtn && editableBins.parentNode) {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.id = 'addBinBtn';
+                btn.className = 'btn-add-bin';
+                btn.textContent = '➕ Add New Bin';
+                btn.onclick = addNewBin;
+                editableBins.parentNode.insertBefore(btn, editableBins.nextSibling);
             }
             
             const setupBtn = document.getElementById('setupBtn');

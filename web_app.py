@@ -94,6 +94,8 @@ def upload_file():
         # Analyze the uploaded image
         print(f"Analyzing bin layout from uploaded image...")
         image = Image.open(filepath)
+        # Use full resolution image for maximum accuracy
+        print(f"Using full resolution image: {image.width}x{image.height} for analysis.")
         result = analyzer._analyze_image(image, expected_bins=expected_bins)
         
         # Add location metadata
