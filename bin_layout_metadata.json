@@ -2,16 +2,25 @@
   "bins": [
     {
       "id": 0,
-      "label": "gray_bin",
-      "type": "landfill",
-      "color": "light gray",
-      "sign": "no signage",
+      "label": "blue_bin",
+      "type": "recycling",
+      "color": "dark blue",
+      "sign": "recycle",
       "pos": "leftmost",
+      "conf": 1
+    },
+    {
+      "id": 1,
+      "label": "green_bin",
+      "type": "compost",
+      "color": "dark green",
+      "sign": "compost",
+      "pos": "rightmost",
       "conf": 1
     }
   ],
-  "location": "budapest_hungary",
-  "location_name": "Budapest, Hungary",
-  "scene": "a classroom with a gray bin",
-  "raw_response": "{\n  \"bins\": [\n    {\n      \"id\": 0,\n      \"label\": \"gray_bin\",\n      \"type\": \"landfill\",\n      \"pos\": \"leftmost\",\n      \"color\": \"light gray\",\n      \"sign\": \"no signage\",\n      \"conf\": 0.7\n    }\n  ],\n  \"scene\": \"a classroom with a gray bin\"\n}"
+  "location": "atlanta_ga_usa",
+  "location_name": "Atlanta, GA, USA",
+  "scene": "two bins: recycling and compost",
+  "raw_response": "{\n  \"bins\": [\n    {\n      \"id\": 0,\n      \"label\": \"blue_bin\",\n      \"type\": \"recycling\",\n      \"pos\": \"center\",\n      \"color\": \"dark blue\",\n      \"sign\": \"recycle\",\n      \"conf\": 0.95\n    },\n    {\n      \"id\": 1,\n      \"label\": \"green_bin\",\n      \"type\": \"compost\",\n      \"pos\": \"second_from_right\",\n      \"color\": \"dark green\",\n      \"sign\": \"compost\",\n      \"conf\": 0.95\n    }\n  ],\n  \"scene\": \"two bins: recycling and compost\"\n}"
 }
