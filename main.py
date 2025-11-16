@@ -15,10 +15,18 @@ from gemini_classifier import TrashClassifier
 from tts_handler import TTSHandler
 from voice_input import VoiceInputHandler
 from bin_layout_analyzer import BinLayoutAnalyzer
-from Arduino_Scripts.trash_bin_servo import MultiArduinoServoController
+
+# Optional Arduino servo controller import
+try:
+    from Arduino_Scripts.trash_bin_servo import MultiArduinoServoController
+except (ImportError, ModuleNotFoundError) as e:
+    MultiArduinoServoController = None
+    # Log that Arduino support is disabled (but don't fail startup)
+    pass
 
 # Modify this when you want to switch cameras (Continuity Cam often shows as index 1 or 2)
-CAMERA_INDEX = 1
+# Try 0 for built-in webcam, 1 or 2 for Continuity Camera
+CAMERA_INDEX = 0
 
 
 def get_language_from_location(location):
@@ -326,23 +334,26 @@ class SmartTrashBin:
         
         # Initialize Arduino servo controller
         self.servo_controller = None
-        try:
-            Logger.log_system_event("Initializing Arduino servo controller...")
-            arduino_configs = {
-                'arduino_1': {'port': os.getenv('ARDUINO_1_PORT', '/dev/tty.usbmodem12101')},
-                'arduino_2': {'port': os.getenv('ARDUINO_2_PORT', '/dev/tty.usbmodem12301')}
-            }
-            self.servo_controller = MultiArduinoServoController(arduino_configs)
-            connection_status = self.servo_controller.connect_all()
-            connected_count = sum(1 for status in connection_status.values() if status)
-            if connected_count > 0:
-                Logger.log_system_event(f"Arduino servo controller initialized - {connected_count}/{len(arduino_configs)} Arduinos connected")
-            else:
-                Logger.log_system_event("Arduino servo controller initialized but no Arduinos connected - bin opening disabled")
-        except Exception as e:
-            Logger.log_error(str(e), "ArduinoServoController initialization")
-            self.servo_controller = None
-            Logger.log_system_event("Arduino servo controller disabled - continuing without bin opening")
+        if MultiArduinoServoController is not None:
+            try:
+                Logger.log_system_event("Initializing Arduino servo controller...")
+                arduino_configs = {
+                    'arduino_1': {'port': os.getenv('ARDUINO_1_PORT', '/dev/tty.usbmodem12101')},
+                    'arduino_2': {'port': os.getenv('ARDUINO_2_PORT', '/dev/tty.usbmodem12301')}
+                }
+                self.servo_controller = MultiArduinoServoController(arduino_configs)
+                connection_status = self.servo_controller.connect_all()
+                connected_count = sum(1 for status in connection_status.values() if status)
+                if connected_count > 0:
+                    Logger.log_system_event(f"Arduino servo controller initialized - {connected_count}/{len(arduino_configs)} Arduinos connected")
+                else:
+                    Logger.log_system_event("Arduino servo controller initialized but no Arduinos connected - bin opening disabled")
+            except Exception as e:
+                Logger.log_error(str(e), "ArduinoServoController initialization")
+                self.servo_controller = None
+                Logger.log_system_event("Arduino servo controller disabled - continuing without bin opening")
+        else:
+            Logger.log_system_event("Arduino servo controller not available (pyserial not installed) - continuing without bin opening")
         
         # State management
         self.last_detection_time = 0
@@ -528,13 +539,15 @@ class SmartTrashBin:
         Logger.log_system_event(f"Selected best frame from {len(frames)} captures (sharpness score: {best_score:.2f})")
         return best_frame
     
-    def _speak_with_interruption_listening(self, text):
+    def _speak_with_interruption_listening(self, text, enable_interruption=True):
         """
-        Speak text while continuously listening for interruptions.
-        If user speaks while TTS is playing, stop TTS and process the input.
+        Speak text while optionally listening for interruptions.
+        Used for closing message and question answers.
         
         Args:
             text: Text to speak
+            enable_interruption: If True, listen for interruptions (for question answers)
+                                 If False, just speak normally (for closing message)
             
         Returns:
             True if interrupted, False if completed normally
@@ -543,14 +556,14 @@ class SmartTrashBin:
             return False
         
         # Start speaking (non-blocking)
-        self.tts.speak(text, interruptible=True)
+        self.tts.speak(text, interruptible=enable_interruption)
         
         # Wait a moment for TTS to start
         time.sleep(0.05)  # Minimal delay for TTS initialization
         
-        # While speaking, continuously listen for interruptions
+        # Only listen for interruptions if enabled (for question answers)
         interrupted = False
-        if self.voice_input:
+        if enable_interruption and self.voice_input:
             Logger.log_system_event("Listening for interruptions while speaking...")
             while self.tts.is_speaking:
                 try:
@@ -767,12 +780,19 @@ class SmartTrashBin:
             Logger.log_system_event("Question not relevant - ignoring chit chat")
             return  # Silent - don't respond to non-relevant questions
         else:
-            # Relevant question - speak the answer
-            Logger.log_tts_output(f"Answer: {answer}")
-            interrupted = self._speak_with_interruption_listening(answer)
+            # Clean up answer text - remove "Answer:" prefix if present
+            answer_text = answer.strip()
+            if answer_text.startswith("Answer:"):
+                answer_text = answer_text[7:].strip()
+            elif answer_text.startswith("answer:"):
+                answer_text = answer_text[7:].strip()
+            
+            # Relevant question - speak the answer (interruptible for follow-up questions)
+            Logger.log_tts_output(answer_text)
+            interrupted = self._speak_with_interruption_listening(answer_text, enable_interruption=True)
             # Continue listening for follow-up questions (if not interrupted)
             if self.listening_for_questions and not interrupted:
-                pass  # No delay - respond immediately
+                pass  # Continue listening in the _listen_for_questions loop
     
     def _check_trash_async(self, frame, check_time):
         """
@@ -1102,14 +1122,23 @@ class SmartTrashBin:
                 # Normal case - bin is available
                 response = format_item_response(item, bin_name, bin_color, bin_position, self.language)
             
+            # Speak item classification (non-interruptible)
+            Logger.log_tts_output(response)
+            self.tts.speak(response, interruptible=False)
+            # Wait for speech to finish
+            if self.tts.speak_thread and self.tts.speak_thread.is_alive():
+                self.tts.speak_thread.join()
+            
+            # Now speak closing message (non-interruptible, just speak it)
             closing_msg = get_closing_message(self.language)
-            combined_response = f"{response}. {closing_msg}"
             self.last_spoken_text.append(response)
             self.last_spoken_text.append(closing_msg)
-            Logger.log_tts_output(combined_response)
-            interrupted = self._speak_with_interruption_listening(combined_response)
-            if interrupted:
-                return  # User interrupted
+            Logger.log_tts_output(closing_msg)
+            self.tts.speak(closing_msg, interruptible=False)
+            # Wait for speech to finish
+            if self.tts.speak_thread and self.tts.speak_thread.is_alive():
+                self.tts.speak_thread.join()
+            interrupted = False  # No interruption during initial classification
         elif len(classifications) > 1:
             # Multiple items - combine all into one continuous speech to eliminate gaps
             all_responses = []
@@ -1143,18 +1172,25 @@ class SmartTrashBin:
                 self.last_spoken_text.append(response)
                 all_responses.append(response)
             
-            # Combine all items with periods, then add closing message
+            # Combine all items with periods and speak (non-interruptible)
             combined_items = ". ".join(all_responses)
-            closing_msg = get_closing_message(self.language)
-            combined_response = f"{combined_items}. {closing_msg}"
-            self.last_spoken_text.append(closing_msg)
+            Logger.log_tts_output(combined_items)
+            self.tts.speak(combined_items, interruptible=False)
+            # Wait for speech to finish
+            if self.tts.speak_thread and self.tts.speak_thread.is_alive():
+                self.tts.speak_thread.join()
             
-            Logger.log_tts_output(combined_response)
-            interrupted = self._speak_with_interruption_listening(combined_response)
-            if interrupted:
-                return  # User interrupted
+            # Now speak closing message (non-interruptible, just speak it)
+            closing_msg = get_closing_message(self.language)
+            self.last_spoken_text.append(closing_msg)
+            Logger.log_tts_output(closing_msg)
+            self.tts.speak(closing_msg, interruptible=False)
+            # Wait for speech to finish
+            if self.tts.speak_thread and self.tts.speak_thread.is_alive():
+                self.tts.speak_thread.join()
+            interrupted = False  # No interruption during initial classification
         
-        # Listen for questions for 2 seconds after speaking (if not interrupted)
+        # Listen for questions for 2 seconds after closing message (only if not interrupted)
         if self.voice_input and not interrupted:
             self._listen_for_questions(2)
     

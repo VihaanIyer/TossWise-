@@ -2,25 +2,16 @@
   "bins": [
     {
       "id": 0,
-      "label": "blue_bin",
-      "type": "recycling",
-      "color": "blue",
-      "sign": "metal cans, foil, plastic bottles",
+      "label": "gray_bin",
+      "type": "landfill",
+      "color": "light gray",
+      "sign": "no signage",
       "pos": "leftmost",
-      "conf": 1
-    },
-    {
-      "id": 1,
-      "label": "green_bin",
-      "type": "compost",
-      "color": "green",
-      "sign": "all food napkins and compostables",
-      "pos": "rightmost",
       "conf": 1
     }
   ],
-  "location": "atlanta_ga_usa",
-  "location_name": "Atlanta, GA, USA",
-  "scene": "a blue recycling bin and a green compost bin",
-  "raw_response": "{\n  \"bins\": [\n    {\n      \"id\": 0,\n      \"label\": \"blue_bin\",\n      \"type\": \"recycling\",\n      \"pos\": \"leftmost\",\n      \"color\": \"blue\",\n      \"sign\": \"metal cans, foil, plastic bottles\",\n      \"conf\": 0.9\n    },\n    {\n      \"id\": 1,\n      \"label\": \"green_bin\",\n      \"type\": \"compost\",\n      \"pos\": \"rightmost\",\n      \"color\": \"green\",\n      \"sign\": \"unknown\",\n      \"conf\": 0.7\n    }\n  ],\n  \"scene\": \"a blue recycling bin and a green compost bin\"\n}"
+  "location": "budapest_hungary",
+  "location_name": "Budapest, Hungary",
+  "scene": "a classroom with a gray bin",
+  "raw_response": "{\n  \"bins\": [\n    {\n      \"id\": 0,\n      \"label\": \"gray_bin\",\n      \"type\": \"landfill\",\n      \"pos\": \"leftmost\",\n      \"color\": \"light gray\",\n      \"sign\": \"no signage\",\n      \"conf\": 0.7\n    }\n  ],\n  \"scene\": \"a classroom with a gray bin\"\n}"
 }

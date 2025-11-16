@@ -23,7 +23,7 @@
         }
         
         .app-container {
-            max-width: 428px;
+            max-width: 900px;
             margin: 0 auto;
             background: rgb(243, 243, 233);
             min-height: 100vh;
@@ -33,26 +33,26 @@
         
         .app-header {
             background: rgb(164, 194, 157);
-            padding: 50px 20px 24px 20px;
-            padding-top: max(50px, env(safe-area-inset-top));
+            padding: 40px 60px 30px 60px;
+            padding-top: max(40px, env(safe-area-inset-top));
             border-bottom: 1px solid rgba(41, 50, 40, 0.1);
         }
         
         .school-name {
             color: rgb(2, 3, 3);
-            font-size: 18px;
+            font-size: 22px;
             font-weight: 700;
-            margin-bottom: 8px;
+            margin-bottom: 12px;
         }
         
         .app-title {
             color: rgb(2, 3, 3);
-            font-size: 24px;
+            font-size: 36px;
             font-weight: 700;
         }
         
         .app-content {
-            padding: 40px 20px;
+            padding: 40px 60px;
             padding-bottom: max(40px, env(safe-area-inset-bottom));
             text-align: center;
         }
@@ -60,27 +60,27 @@
         .status-card {
             background: white;
             border-radius: 20px;
-            padding: 32px 24px;
-            margin-bottom: 32px;
+            padding: 40px 32px;
+            margin-bottom: 40px;
             border: 2px solid rgb(107, 125, 141);
             box-shadow: 0 4px 12px rgba(41, 50, 40, 0.1);
         }
         
         .status-icon {
-            font-size: 64px;
-            margin-bottom: 16px;
+            font-size: 80px;
+            margin-bottom: 20px;
         }
         
         .status-text {
             color: rgb(41, 50, 40);
-            font-size: 20px;
+            font-size: 28px;
             font-weight: 700;
-            margin-bottom: 12px;
+            margin-bottom: 16px;
         }
         
         .status-desc {
             color: rgb(107, 125, 141);
-            font-size: 15px;
+            font-size: 17px;
             line-height: 1.6;
         }
         
@@ -121,18 +121,23 @@
             background: rgb(41, 50, 40);
             color: white;
             border: none;
-            padding: 18px;
-            font-size: 17px;
+            padding: 20px;
+            font-size: 18px;
             font-weight: 600;
             border-radius: 12px;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             width: 100%;
             touch-action: manipulation;
         }
         
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(41, 50, 40, 0.4);
+        }
+        
         .btn-primary:active {
-            transform: scale(0.98);
+            transform: scale(0.96);
             background: rgb(2, 3, 3);
         }
         
@@ -146,19 +151,25 @@
             background: #dc3545;
             color: white;
             border: none;
-            padding: 18px;
-            font-size: 17px;
+            padding: 20px;
+            font-size: 18px;
             font-weight: 600;
             border-radius: 12px;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             width: 100%;
             touch-action: manipulation;
         }
         
-        .btn-stop:active {
-            transform: scale(0.98);
+        .btn-stop:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(220, 53, 69, 0.4);
             background: #c82333;
+        }
+        
+        .btn-stop:active {
+            transform: scale(0.96);
+            background: #a71e2a;
         }
         
         .btn-stop:disabled {
@@ -169,46 +180,52 @@
         
         /* Insights Section */
         .insights-section {
-            margin-bottom: 32px;
+            margin-bottom: 40px;
             text-align: left;
         }
         
         .insights-title {
             color: rgb(2, 3, 3);
-            font-size: 20px;
+            font-size: 28px;
             font-weight: 700;
-            margin-bottom: 20px;
+            margin-bottom: 24px;
         }
         
         .bins-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-            gap: 16px;
-            margin-bottom: 24px;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 24px;
+            margin-bottom: 32px;
         }
         
         .bin-card {
             background: white;
             border-radius: 16px;
-            padding: 16px;
+            padding: 24px;
             border: 2px solid rgb(107, 125, 141);
             box-shadow: 0 2px 8px rgba(41, 50, 40, 0.1);
             text-align: center;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .bin-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(41, 50, 40, 0.15);
         }
         
         .bin-label {
             color: rgb(41, 50, 40);
-            font-size: 14px;
+            font-size: 16px;
             font-weight: 600;
-            margin-bottom: 8px;
+            margin-bottom: 12px;
             text-transform: capitalize;
         }
         
         .bin-visual {
             position: relative;
-            width: 80px;
-            height: 100px;
-            margin: 0 auto 8px;
+            width: 100px;
+            height: 120px;
+            margin: 0 auto 12px;
             background: #f0f0f0;
             border-radius: 8px;
             border: 3px solid rgb(107, 125, 141);
@@ -231,15 +248,15 @@
         
         .bin-percentage {
             color: rgb(2, 3, 3);
-            font-size: 18px;
+            font-size: 24px;
             font-weight: 700;
-            margin-bottom: 4px;
+            margin-bottom: 6px;
         }
         
         .bin-count {
             color: rgb(107, 125, 141);
-            font-size: 12px;
-            margin-bottom: 8px;
+            font-size: 14px;
+            margin-bottom: 10px;
         }
         
         .contamination-indicator {
@@ -268,25 +285,98 @@
         .stats-summary {
             background: rgb(243, 243, 233);
             border-radius: 12px;
-            padding: 16px;
-            margin-top: 16px;
+            padding: 24px;
+            margin-top: 24px;
             border: 2px solid rgb(107, 125, 141);
         }
         
         .stat-row {
             display: flex;
             justify-content: space-between;
-            margin-bottom: 8px;
-            font-size: 14px;
+            margin-bottom: 12px;
+            font-size: 16px;
         }
         
         .stat-label {
             color: rgb(107, 125, 141);
+            font-size: 16px;
         }
         
         .stat-value {
             color: rgb(2, 3, 3);
             font-weight: 600;
+            font-size: 18px;
+        }
+        
+        /* Trash falling animation container */
+        .trash-animation-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1000;
+            overflow: hidden;
+        }
+        
+        .falling-trash {
+            position: absolute;
+            font-size: 28px;
+            animation: fallIntoBin 1.2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+            pointer-events: none;
+            z-index: 1001;
+        }
+        
+        @keyframes fallIntoBin {
+            0% {
+                opacity: 1;
+                transform: translateY(0) translateX(0) rotate(0deg) scale(1);
+            }
+            50% {
+                opacity: 1;
+                transform: translateY(var(--fall-distance)) translateX(var(--offset-x)) rotate(180deg) scale(1.1);
+            }
+            100% {
+                opacity: 0;
+                transform: translateY(var(--fall-distance)) translateX(var(--offset-x)) rotate(360deg) scale(0.3);
+            }
+        }
+        
+        /* Bin card animation when item is added */
+        .bin-card.new-item {
+            animation: binPulse 0.6s ease-out;
+        }
+        
+        @keyframes binPulse {
+            0% {
+                transform: scale(1);
+                box-shadow: 0 2px 8px rgba(41, 50, 40, 0.1);
+            }
+            50% {
+                transform: scale(1.05);
+                box-shadow: 0 4px 16px rgba(41, 50, 40, 0.3);
+            }
+            100% {
+                transform: scale(1);
+                box-shadow: 0 2px 8px rgba(41, 50, 40, 0.1);
+            }
+        }
+        
+        .bin-fill.new-item {
+            animation: fillBounce 0.8s ease-out;
+        }
+        
+        @keyframes fillBounce {
+            0% {
+                transform: scaleY(0.8);
+            }
+            50% {
+                transform: scaleY(1.05);
+            }
+            100% {
+                transform: scaleY(1);
+            }
         }
     </style>
 </head>
@@ -338,6 +428,9 @@
         </div>
     </div>
     
+    <!-- Trash animation container -->
+    <div class="trash-animation-container" id="trashAnimationContainer"></div>
+    
     <script>
         // School names mapping
         const schoolNames = {
@@ -386,6 +479,79 @@
         
         // Insights polling
         let insightsInterval = null;
+        let previousBinCounts = {}; // Track previous bin item counts
+        
+        // Trash emojis by bin type
+        const trashEmojis = {
+            'recycling': ['📄', '📰', '📦', '🥤', '🍶', '📋'],
+            'compost': ['🍌', '🍎', '🥬', '🌿', '☕', '🥑'],
+            'landfill': ['🍕', '🍔', '🥤', '📱', '💡', '🗑️']
+        };
+        
+        function getRandomTrashEmoji(binType) {
+            const emojis = trashEmojis[binType] || ['🗑️'];
+            return emojis[Math.floor(Math.random() * emojis.length)];
+        }
+        
+        function createFallingTrashAnimation(binCard, binType) {
+            const container = document.getElementById('trashAnimationContainer');
+            if (!container) {
+                console.error('Animation container not found');
+                return;
+            }
+            
+            // Get bin card position - wait a bit for DOM to settle
+            setTimeout(() => {
+                const binVisual = binCard.querySelector('.bin-visual');
+                if (!binVisual) {
+                    console.error('Bin visual element not found');
+                    return;
+                }
+                
+                const binVisualRect = binVisual.getBoundingClientRect();
+                if (binVisualRect.width === 0 || binVisualRect.height === 0) {
+                    console.error('Bin visual has zero dimensions');
+                    return;
+                }
+                
+                const targetX = binVisualRect.left + binVisualRect.width / 2;
+                const targetY = binVisualRect.top + binVisualRect.height;
+                
+                // Create 2-3 trash items falling
+                const trashCount = 2 + Math.floor(Math.random() * 2);
+                const startY = binVisualRect.top - 150; // Start 150px above the bin
+                
+                console.log(`Creating ${trashCount} falling trash items for ${binType} bin at (${targetX}, ${targetY})`);
+                
+                for (let i = 0; i < trashCount; i++) {
+                    const trash = document.createElement('div');
+                    trash.className = 'falling-trash';
+                    trash.textContent = getRandomTrashEmoji(binType);
+                    
+                    // Randomize starting position slightly above the bin
+                    const startX = targetX + (Math.random() - 0.5) * 80;
+                    const offsetX = (Math.random() - 0.5) * 30;
+                    const fallDistance = targetY - startY; // Calculate fall distance in pixels
+                    
+                    trash.style.left = startX + 'px';
+                    trash.style.top = startY + 'px';
+                    trash.style.setProperty('--fall-distance', fallDistance + 'px');
+                    trash.style.setProperty('--offset-x', offsetX + 'px');
+                    
+                    // Add slight delay for staggered effect
+                    trash.style.animationDelay = (i * 0.1) + 's';
+                    
+                    container.appendChild(trash);
+                    
+                    // Remove after animation
+                    setTimeout(() => {
+                        if (trash.parentNode) {
+                            trash.parentNode.removeChild(trash);
+                        }
+                    }, 1200 + (i * 100));
+                }
+            }, 50);
+        }
         
         function updateInsights() {
             try {
@@ -425,6 +591,12 @@
                                     const binCard = document.createElement('div');
                                     binCard.className = 'bin-card';
                                     
+                                    // Check if this bin has a new item
+                                    const binKey = bin.type || bin.label;
+                                    const previousCount = previousBinCounts[binKey] || 0;
+                                    const currentCount = bin.item_count || 0;
+                                    const hasNewItem = currentCount > previousCount;
+                                    
                                     // Determine contamination status
                                     let contaminationClass = 'clean';
                                     let contaminationText = 'Clean';
@@ -436,10 +608,12 @@
                                         contaminationText = `${bin.contamination_percentage}% contaminated`;
                                     }
                                     
+                                    const fillClass = hasNewItem ? `${bin.type} new-item` : bin.type;
+                                    
                                     binCard.innerHTML = `
                                         <div class="bin-label">${bin.label || bin.type}</div>
                                         <div class="bin-visual">
-                                            <div class="bin-fill ${bin.type}" style="height: ${bin.fill_percentage}%"></div>
+                                            <div class="bin-fill ${fillClass}" style="height: ${bin.fill_percentage}%"></div>
                                         </div>
                                         <div class="bin-percentage">${bin.fill_percentage}%</div>
                                         <div class="bin-count">${bin.item_count} items</div>
@@ -449,6 +623,28 @@
                                     `;
                                     
                                     binsGrid.appendChild(binCard);
+                                    
+                                    // Trigger animation if new item detected (after DOM is ready)
+                                    if (hasNewItem) {
+                                        console.log(`New item detected in ${binKey}: ${previousCount} -> ${currentCount}`);
+                                        // Use requestAnimationFrame to ensure DOM is ready
+                                        requestAnimationFrame(() => {
+                                            setTimeout(() => {
+                                                try {
+                                                    createFallingTrashAnimation(binCard, bin.type);
+                                                    binCard.classList.add('new-item');
+                                                    setTimeout(() => {
+                                                        binCard.classList.remove('new-item');
+                                                    }, 600);
+                                                } catch (e) {
+                                                    console.error('Animation error:', e);
+                                                }
+                                            }, 100);
+                                        });
+                                    }
+                                    
+                                    // Update previous count
+                                    previousBinCounts[binKey] = currentCount;
                                 });
                             } else {
                                 binsGrid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: rgb(107, 125, 141); padding: 20px;">No bins configured yet</div>';

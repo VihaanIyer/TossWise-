@@ -127,7 +127,7 @@
         
         /* App Container */
         .app-container {
-            max-width: 428px;
+            max-width: 900px;
             margin: 0 auto;
             background: rgb(243, 243, 233);
             min-height: 100vh;
@@ -138,67 +138,67 @@
         /* Header */
         .app-header {
             background: rgb(164, 194, 157);
-            padding: 50px 20px 20px 20px;
-            padding-top: max(50px, env(safe-area-inset-top));
+            padding: 40px 60px 30px 60px;
+            padding-top: max(40px, env(safe-area-inset-top));
             border-bottom: 1px solid rgba(41, 50, 40, 0.1);
         }
         
         .school-name {
             color: rgb(2, 3, 3);
-            font-size: 18px;
+            font-size: 22px;
             font-weight: 700;
-            margin-bottom: 8px;
+            margin-bottom: 12px;
         }
         
         .app-title {
             color: rgb(2, 3, 3);
-            font-size: 24px;
+            font-size: 36px;
             font-weight: 700;
-            margin-bottom: 4px;
+            margin-bottom: 8px;
         }
         
         .app-subtitle {
             color: rgb(107, 125, 141);
-            font-size: 14px;
+            font-size: 16px;
             font-weight: 400;
         }
         
         /* Content */
         .app-content {
-            padding: 24px 20px;
-            padding-bottom: max(24px, env(safe-area-inset-bottom));
+            padding: 40px 60px;
+            padding-bottom: max(40px, env(safe-area-inset-bottom));
         }
         
         .step-indicator {
             display: flex;
-            gap: 8px;
-            margin-bottom: 32px;
+            gap: 24px;
+            margin-bottom: 40px;
             justify-content: center;
         }
         
         .step-dot {
-            width: 8px;
-            height: 8px;
+            width: 10px;
+            height: 10px;
             border-radius: 50%;
             background: rgb(107, 125, 141);
             transition: all 0.3s;
         }
         
         .step-dot.active {
-            width: 24px;
+            width: 28px;
             border-radius: 4px;
             background: rgb(41, 50, 40);
         }
         
         .form-section {
-            margin-bottom: 32px;
+            margin-bottom: 40px;
         }
         
         .section-label {
             color: rgb(2, 3, 3);
-            font-size: 16px;
+            font-size: 18px;
             font-weight: 600;
-            margin-bottom: 12px;
+            margin-bottom: 16px;
             display: block;
         }
         
@@ -208,20 +208,25 @@
         
         select {
             width: 100%;
-            padding: 16px 20px;
+            padding: 18px 24px;
             border: 2px solid rgb(107, 125, 141);
             border-radius: 12px;
-            font-size: 16px;
+            font-size: 17px;
             background: white;
             color: rgb(2, 3, 3);
             cursor: pointer;
-            transition: all 0.2s;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             appearance: none;
             -webkit-appearance: none;
             background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%236B7D8D' d='M6 8L0 0h12z'/%3E%3C/svg%3E");
             background-repeat: no-repeat;
-            background-position: right 20px center;
+            background-position: right 24px center;
             padding-right: 50px;
+        }
+        
+        select:hover {
+            border-color: rgb(41, 50, 40);
+            box-shadow: 0 2px 8px rgba(41, 50, 40, 0.1);
         }
         
         select:focus {
@@ -232,7 +237,7 @@
         
         /* Camera Section */
         .camera-section {
-            margin-bottom: 32px;
+            margin-bottom: 40px;
         }
         
         .camera-container {
@@ -241,8 +246,8 @@
             border-radius: 16px;
             overflow: hidden;
             background: rgb(2, 3, 3);
-            min-height: 400px;
-            margin-bottom: 16px;
+            min-height: 500px;
+            margin-bottom: 20px;
         }
         
         .camera-placeholder {
@@ -250,20 +255,20 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            padding: 60px 20px;
+            padding: 80px 40px;
             text-align: center;
             color: white;
-            min-height: 400px;
+            min-height: 500px;
         }
         
         .camera-placeholder-icon {
-            font-size: 64px;
-            margin-bottom: 16px;
+            font-size: 80px;
+            margin-bottom: 20px;
             opacity: 0.7;
         }
         
         .camera-placeholder-text {
-            font-size: 16px;
+            font-size: 18px;
             opacity: 0.8;
             line-height: 1.5;
         }
@@ -333,14 +338,14 @@
         
         .btn-retake, .btn-continue {
             flex: 1;
-            max-width: 160px;
-            padding: 14px 24px;
+            max-width: 200px;
+            padding: 16px 32px;
             border: none;
             border-radius: 12px;
-            font-size: 15px;
+            font-size: 16px;
             font-weight: 600;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             touch-action: manipulation;
         }
         
@@ -349,8 +354,14 @@
             color: white;
         }
         
+        .btn-retake:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(107, 125, 141, 0.3);
+            background: rgb(90, 110, 125);
+        }
+        
         .btn-retake:active {
-            transform: scale(0.98);
+            transform: scale(0.96);
             background: rgb(41, 50, 40);
         }
         
@@ -359,8 +370,14 @@
             color: white;
         }
         
+        .btn-continue:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(41, 50, 40, 0.3);
+            background: rgb(2, 3, 3);
+        }
+        
         .btn-continue:active {
-            transform: scale(0.98);
+            transform: scale(0.96);
             background: rgb(2, 3, 3);
         }
         
@@ -385,16 +402,16 @@
         /* Buttons */
         .btn-primary {
             width: 100%;
-            padding: 18px;
+            padding: 20px;
             background: rgb(41, 50, 40);
             color: white;
             border: none;
             border-radius: 12px;
-            font-size: 17px;
+            font-size: 18px;
             font-weight: 600;
             cursor: pointer;
-            transition: all 0.2s;
-            margin-top: 8px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            margin-top: 12px;
             display: none;
             touch-action: manipulation;
         }
@@ -403,8 +420,13 @@
             display: block;
         }
         
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(41, 50, 40, 0.4);
+        }
+        
         .btn-primary:active {
-            transform: scale(0.98);
+            transform: scale(0.96);
             background: rgb(2, 3, 3);
         }
         
@@ -418,7 +440,7 @@
         .loading {
             display: none;
             text-align: center;
-            padding: 32px 20px;
+            padding: 40px 40px;
         }
         
         .loading.active {
@@ -426,13 +448,13 @@
         }
         
         .spinner {
-            border: 3px solid rgb(243, 243, 233);
-            border-top: 3px solid rgb(41, 50, 40);
+            border: 4px solid rgb(243, 243, 233);
+            border-top: 4px solid rgb(41, 50, 40);
             border-radius: 50%;
-            width: 40px;
-            height: 40px;
+            width: 48px;
+            height: 48px;
             animation: spin 1s linear infinite;
-            margin: 0 auto 16px;
+            margin: 0 auto 20px;
         }
         
         @keyframes spin {
@@ -442,14 +464,14 @@
         
         .loading-text {
             color: rgb(107, 125, 141);
-            font-size: 15px;
+            font-size: 17px;
         }
         
         /* Results */
         .result {
             display: none;
-            margin-top: 24px;
-            padding: 20px;
+            margin-top: 32px;
+            padding: 28px;
             background: white;
             border-radius: 16px;
             border: 2px solid rgb(107, 125, 141);
@@ -461,46 +483,52 @@
         
         .result-title {
             color: rgb(41, 50, 40);
-            font-size: 20px;
+            font-size: 24px;
             font-weight: 700;
-            margin-bottom: 12px;
+            margin-bottom: 16px;
         }
         
         .result-content {
             color: rgb(2, 3, 3);
-            font-size: 15px;
+            font-size: 17px;
             line-height: 1.6;
         }
         
         .editable-bin {
             background: rgb(243, 243, 233);
-            padding: 16px;
-            margin-bottom: 12px;
+            padding: 24px;
+            margin-bottom: 16px;
             border-radius: 12px;
             border: 2px solid rgb(107, 125, 141);
         }
         
         .bin-field {
-            margin-bottom: 12px;
+            margin-bottom: 16px;
         }
         
         .bin-field label {
             display: block;
-            font-size: 13px;
+            font-size: 15px;
             color: rgb(107, 125, 141);
-            margin-bottom: 6px;
+            margin-bottom: 8px;
             font-weight: 500;
         }
         
         .bin-field input,
         .bin-field select {
             width: 100%;
-            padding: 12px 16px;
+            padding: 14px 18px;
             border: 1px solid rgb(107, 125, 141);
             border-radius: 8px;
-            font-size: 15px;
+            font-size: 16px;
             color: rgb(2, 3, 3);
             background: white;
+            transition: all 0.2s;
+        }
+        
+        .bin-field input:hover,
+        .bin-field select:hover {
+            border-color: rgb(41, 50, 40);
         }
         
         .bin-field select {
@@ -513,37 +541,54 @@
         }
         
         .bin-actions {
-            margin-top: 12px;
+            margin-top: 16px;
         }
         
         .btn-remove {
             background: #f44336;
             color: white;
             border: none;
-            padding: 10px 20px;
+            padding: 12px 24px;
             border-radius: 8px;
             cursor: pointer;
-            font-size: 14px;
+            font-size: 15px;
             font-weight: 600;
             width: 100%;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .btn-remove:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(244, 67, 54, 0.3);
+            background: #d32f2f;
+        }
+        
+        .btn-remove:active {
+            transform: scale(0.96);
         }
         
         .btn-setup {
             background: rgb(41, 50, 40);
             color: white;
             border: none;
-            padding: 18px;
+            padding: 20px;
             border-radius: 12px;
-            font-size: 17px;
+            font-size: 18px;
             font-weight: 600;
             cursor: pointer;
-            margin-top: 20px;
+            margin-top: 24px;
             width: 100%;
             touch-action: manipulation;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .btn-setup:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(41, 50, 40, 0.4);
         }
         
         .btn-setup:active {
-            transform: scale(0.98);
+            transform: scale(0.96);
             background: rgb(2, 3, 3);
         }
         
@@ -555,11 +600,11 @@
         
         /* Success/Error Messages */
         .message-box {
-            padding: 16px;
+            padding: 20px;
             border-radius: 12px;
-            margin-top: 16px;
-            font-size: 14px;
-            line-height: 1.5;
+            margin-top: 20px;
+            font-size: 16px;
+            line-height: 1.6;
         }
         
         .message-box.success {
